@@ -1,9 +1,8 @@
 import { Ball } from './balls.js';
 export class Game {
-    constructor(canvas, context, shadow = true) {
+    constructor(canvas, context) {
         this.canvas = canvas;
         this.context = context;
-        this.shadow = shadow;
         this.balls = [];
         this.draggingBall = null;
         this.originalBall = null;
@@ -11,6 +10,7 @@ export class Game {
         this.ballSize = 20;
         this.ballSpacing = this.ballSize + 5;
         this.colors = ['#7f8c8d', '#3498db', '#d91e18']; // '#e74c3c' 
+        this.shadow = false;
         this.canvas.style.cursor = 'grab';
         this.witdh = this.canvas.width;
         this.height = this.canvas.height;
@@ -35,6 +35,11 @@ export class Game {
         this.canvas.addEventListener('touchmove', (event) => { this.onMoveHandle(event); });
         this.canvas.addEventListener('mouseup', (event) => { this.onReleaseHandle(event); });
         this.canvas.addEventListener('touchend', (event) => { this.onReleaseHandle(event); });
+        const shadowSwitch = document.getElementById('switch');
+        shadowSwitch.addEventListener('change', (event) => {
+            this.shadow = shadowSwitch.checked;
+            this.drawBoard();
+        });
         this.updateBoard();
     }
     getBallAt(x, y) {
@@ -63,7 +68,7 @@ export class Game {
             });
         });
         if (this.draggingBall != null) {
-            this.draggingBall.draw(this.canvas, this.context);
+            this.draggingBall.draw(this.canvas, this.context, this.shadow);
             this.draggingBall.drawBorder(this.canvas, this.context);
         }
     }

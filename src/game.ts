@@ -16,10 +16,11 @@ export class Game {
 
         private colors: string[] = ['#7f8c8d', '#3498db', '#d91e18'] // '#e74c3c' 
 
+        public shadow: boolean = false;
+
         constructor(
                 private canvas: HTMLCanvasElement,
-                private context: CanvasRenderingContext2D,
-                private shadow: boolean = true) {
+                private context: CanvasRenderingContext2D) {
 
                 this.canvas.style.cursor = 'grab';
 
@@ -54,6 +55,12 @@ export class Game {
                 this.canvas.addEventListener('mouseup', (event) => { this.onReleaseHandle(event) });
                 this.canvas.addEventListener('touchend', (event) => { this.onReleaseHandle(event) });
 
+                const shadowSwitch = document.getElementById('switch') as HTMLInputElement;
+                shadowSwitch.addEventListener('change', (event) => {
+                        this.shadow = shadowSwitch.checked;
+                        this.drawBoard();
+                });
+
                 this.updateBoard();
         }
 
@@ -87,7 +94,7 @@ export class Game {
                 });
 
                 if (this.draggingBall != null) {
-                        this.draggingBall.draw(this.canvas, this.context);
+                        this.draggingBall.draw(this.canvas, this.context, this.shadow);
                         this.draggingBall.drawBorder(this.canvas, this.context);
                 }
         }

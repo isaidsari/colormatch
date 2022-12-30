@@ -7,7 +7,7 @@ export class Ball {
                 public color: string) {
         }
 
-        public draw(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D, shadow: boolean = false): void {
+        public draw(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D, shadow: boolean): void {
                 context.beginPath();
                 if (shadow) {
                         context.shadowColor = '#1c2d40';

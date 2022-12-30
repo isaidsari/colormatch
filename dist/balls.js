@@ -5,7 +5,7 @@ export class Ball {
         this.radius = radius;
         this.color = color;
     }
-    draw(canvas, context, shadow = false) {
+    draw(canvas, context, shadow) {
         context.beginPath();
         if (shadow) {
             context.shadowColor = '#1c2d40';
