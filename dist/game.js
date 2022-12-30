@@ -11,6 +11,7 @@ export class Game {
         this.ballSpacing = this.ballSize + 5;
         this.colors = ['#7f8c8d', '#3498db', '#d91e18']; // '#e74c3c' 
         this.shadow = false;
+        this.score = 0;
         this.canvas.style.cursor = 'grab';
         this.witdh = this.canvas.width;
         this.height = this.canvas.height;
@@ -74,11 +75,14 @@ export class Game {
     }
     updateBoard() {
         let matches = this.findMatches();
+        let brokenBalls = 0;
         while (matches.length > 0) {
-            this.breakMatches(matches);
+            brokenBalls += this.breakMatches(matches);
             this.fillBoard();
             matches = this.findMatches();
         }
+        this.score += brokenBalls;
+        document.getElementById('score').innerHTML = this.score.toString();
         this.drawBoard();
     }
     showMatches() {
@@ -161,16 +165,20 @@ export class Game {
         return matches;
     }
     breakMatches(matches) {
+        let brokenBalls = 0;
         matches.forEach((match) => {
             match.forEach((ball) => {
                 this.balls.forEach((row) => {
                     row.forEach((column) => {
-                        if (column == ball)
+                        if (column == ball) {
                             row[row.indexOf(column)] = new Ball(column.x, column.y, this.ballSize, 'transparent');
+                            brokenBalls++;
+                        }
                     });
                 });
             });
         });
+        return brokenBalls;
     }
     onPressHandle(event) {
         if (event instanceof MouseEvent)

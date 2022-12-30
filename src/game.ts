@@ -17,6 +17,8 @@ export class Game {
         private colors: string[] = ['#7f8c8d', '#3498db', '#d91e18'] // '#e74c3c' 
 
         public shadow: boolean = false;
+        private score: number = 0;
+
 
         constructor(
                 private canvas: HTMLCanvasElement,
@@ -103,14 +105,18 @@ export class Game {
 
                 let matches = this.findMatches();
 
+                let brokenBalls = 0;
+
                 while (matches.length > 0) {
-                        this.breakMatches(matches);
+                        brokenBalls += this.breakMatches(matches);
                         this.fillBoard();
                         matches = this.findMatches();
                 }
 
-                this.drawBoard();
+                this.score += brokenBalls;
+                document.getElementById('score').innerHTML = this.score.toString();
 
+                this.drawBoard();
         }
 
         private showMatches(): void {
@@ -194,17 +200,22 @@ export class Game {
                 return matches;
         }
 
-        public breakMatches(matches: Ball[][]): void {
+        public breakMatches(matches: Ball[][]): number {
+                let brokenBalls = 0;
+
                 matches.forEach((match) => {
                         match.forEach((ball) => {
                                 this.balls.forEach((row) => {
                                         row.forEach((column) => {
-                                                if (column == ball)
+                                                if (column == ball) {
                                                         row[row.indexOf(column)] = new Ball(column.x, column.y, this.ballSize, 'transparent');
+                                                        brokenBalls++;
+                                                }
                                         });
                                 });
                         });
                 });
+                return brokenBalls;
         }
 
         private onPressHandle(event: MouseEvent | TouchEvent): void {
