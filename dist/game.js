@@ -80,9 +80,10 @@ export class Game {
     }
     updateBoard() {
         let matches = this.findMatches();
-        let brokenBalls = 0;
+        let brokenBalls = this.breakMatches(matches);
+        matches = this.findMatches();
         while (matches.length > 0) {
-            brokenBalls += this.breakMatches(matches);
+            this.breakMatches(matches);
             this.fillBoard();
             matches = this.findMatches();
         }
