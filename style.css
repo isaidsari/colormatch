@@ -16,6 +16,8 @@ canvas {
         border-radius: 10px;
         position: relative;
         margin: auto;
+        margin-top: 30px;
+        margin-bottom: 30px;
         overflow: hidden;
 
         width: 380px;
@@ -24,4 +26,39 @@ canvas {
 
 .game-area {
         display: block;
+}
+
+.shadow-switch {
+        /* hide the checkbox */
+        display: none;
+}
+
+.shadow-switch-label {
+        /* make ball */
+        display: block;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        background-color: #2C3E50;
+        border: 2px solid #fff;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        position: relative;
+        margin: auto;
+        /* write text bottom */
+        line-height: 40px;
+
+        /* make the label look like a switch toggle */
+        cursor: pointer;
+
+        font-size: small;
+        text-align: center;
+        transition: all 0.3s ease;
+}
+
+.shadow-switch:checked+.shadow-switch-label {
+        /* move the switch toggle indicator to the right when the checkbox is checked */
+        /* add a shadow to the label when the checkbox is checked */
+        box-shadow: 0 2px 15px rgb(28, 45, 64);
+        /* make shadow more visible */
+        background-color: #34495E;
 }
