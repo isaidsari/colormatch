@@ -9,4 +9,3 @@ document.addEventListener('DOMContentLoaded', () => {
     const game = new Game(canvas, context);
     game.shadow = shadow;
 });
-// ref https://dev.to/timhuang/a-simple-way-to-detect-if-browser-is-on-a-mobile-device-with-javascript-44j3

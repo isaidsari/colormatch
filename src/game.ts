@@ -67,7 +67,7 @@ export class Game {
 
                 this.score = 0;
                 this.updateScore();
-                
+
         }
 
         public getBallAt(x: number, y: number): Ball {
@@ -82,7 +82,7 @@ export class Game {
                         });
                 });
                 if (foundBall == null) {
-                        //throw new Error('no ball found');
+                        // throw new Error('no ball found');
                 }
                 return foundBall;
         }
@@ -128,13 +128,10 @@ export class Game {
                 this.drawBoard();
         }
 
-        private showMatches(): void {
-                let matches = this.findMatches();
-
+        private showMatches(matches: Ball[][]): void {
                 if (matches.length > 0) {
                         matches.forEach((match) => {
                                 this.context.beginPath();
-                                //this.context.moveTo(match[0].x, match[0].y);
                                 match.forEach((ball) => {
                                         this.context.lineTo(ball.x, ball.y);
                                 });
@@ -145,8 +142,6 @@ export class Game {
         }
 
         public fillBoard(): void {
-
-                // fill transparent balls
                 this.balls.forEach((row) => {
                         row.forEach((ball) => {
                                 if (ball.color == 'transparent') {
@@ -211,7 +206,6 @@ export class Game {
 
         public breakMatches(matches: Ball[][]): number {
                 let brokenBalls = 0;
-
                 matches.forEach((match) => {
                         match.forEach((ball) => {
                                 this.balls.forEach((row) => {
@@ -276,6 +270,7 @@ export class Game {
                 const swap = (dragBall: Ball, targetBall: Ball): void => {
                         dragBall.move(this.originalBall.x, this.originalBall.y);
                         dragBall.swap(targetBall);
+
                         let dragBallIdx = { x: this.balls.indexOf(this.balls.find((row) => row.indexOf(dragBall) != -1)), y: this.balls[this.balls.indexOf(this.balls.find((row) => row.indexOf(dragBall) != -1))].indexOf(dragBall) };
                         let targetBallIdx = { x: this.balls.indexOf(this.balls.find((row) => row.indexOf(targetBall) != -1)), y: this.balls[this.balls.indexOf(this.balls.find((row) => row.indexOf(targetBall) != -1))].indexOf(targetBall) };
 

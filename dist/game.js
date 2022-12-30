@@ -56,7 +56,7 @@ export class Game {
             });
         });
         if (foundBall == null) {
-            //throw new Error('no ball found');
+            // throw new Error('no ball found');
         }
         return foundBall;
     }
@@ -91,12 +91,10 @@ export class Game {
         this.updateScore();
         this.drawBoard();
     }
-    showMatches() {
-        let matches = this.findMatches();
+    showMatches(matches) {
         if (matches.length > 0) {
             matches.forEach((match) => {
                 this.context.beginPath();
-                //this.context.moveTo(match[0].x, match[0].y);
                 match.forEach((ball) => {
                     this.context.lineTo(ball.x, ball.y);
                 });
@@ -106,7 +104,6 @@ export class Game {
         }
     }
     fillBoard() {
-        // fill transparent balls
         this.balls.forEach((row) => {
             row.forEach((ball) => {
                 if (ball.color == 'transparent') {

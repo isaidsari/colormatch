@@ -1,6 +1,5 @@
 import { Game } from './game.js';
 
-
 var shadow: boolean = true;
 
 if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
@@ -16,5 +15,3 @@ document.addEventListener('DOMContentLoaded', () => {
         const game = new Game(canvas, context);
         game.shadow = shadow;
 });
-
-// ref https://dev.to/timhuang/a-simple-way-to-detect-if-browser-is-on-a-mobile-device-with-javascript-44j3
