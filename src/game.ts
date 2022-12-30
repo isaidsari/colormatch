@@ -66,6 +66,8 @@ export class Game {
                 this.updateBoard();
 
                 this.score = 0;
+                this.updateScore();
+                
         }
 
         public getBallAt(x: number, y: number): Ball {
@@ -103,6 +105,10 @@ export class Game {
                 }
         }
 
+        private updateScore(): void {
+                document.getElementById('score').innerHTML = this.score.toString();
+        }
+
         public updateBoard(): void {
 
                 let matches = this.findMatches();
@@ -116,7 +122,7 @@ export class Game {
                 }
 
                 this.score += brokenBalls;
-                document.getElementById('score').innerHTML = this.score.toString();
+                this.updateScore();
 
                 this.drawBoard();
         }

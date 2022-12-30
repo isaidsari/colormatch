@@ -43,6 +43,7 @@ export class Game {
         });
         this.updateBoard();
         this.score = 0;
+        this.updateScore();
     }
     getBallAt(x, y) {
         const distance = (x, y, ball) => { return Math.sqrt(Math.pow(x - ball.x, 2) + Math.pow(y - ball.y, 2)); };
@@ -74,6 +75,9 @@ export class Game {
             this.draggingBall.drawBorder(this.canvas, this.context);
         }
     }
+    updateScore() {
+        document.getElementById('score').innerHTML = this.score.toString();
+    }
     updateBoard() {
         let matches = this.findMatches();
         let brokenBalls = 0;
@@ -83,7 +87,7 @@ export class Game {
             matches = this.findMatches();
         }
         this.score += brokenBalls;
-        document.getElementById('score').innerHTML = this.score.toString();
+        this.updateScore();
         this.drawBoard();
     }
     showMatches() {
