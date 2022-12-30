@@ -60,6 +60,7 @@ export class Game {
                 const shadowSwitch = document.getElementById('switch') as HTMLInputElement;
                 shadowSwitch.addEventListener('change', (event) => {
                         this.shadow = shadowSwitch.checked;
+                        this.context.restore();
                         this.drawBoard();
                 });
 

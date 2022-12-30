@@ -12,6 +12,9 @@ export class Ball {
                 if (shadow) {
                         context.shadowColor = '#1c2d40';
                         context.shadowBlur = 10;
+                } else {
+                        context.shadowColor = 'transparent';
+                        context.shadowBlur = 0;
                 }
                 context.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
                 context.fillStyle = this.color;
