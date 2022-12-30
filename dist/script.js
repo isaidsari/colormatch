@@ -6,5 +6,10 @@ document.addEventListener('DOMContentLoaded', () => {
     navigator.serviceWorker.register('./dist/sw.js');
     const canvas = document.getElementById('canvas');
     const context = canvas.getContext('2d');
+    const shadowSwitch = document.getElementById('switch');
+    shadowSwitch.addEventListener('change', (event) => {
+        shadow = shadowSwitch.checked;
+    });
     const game = new Game(canvas, context, shadow);
 });
+// ref https://dev.to/timhuang/a-simple-way-to-detect-if-browser-is-on-a-mobile-device-with-javascript-44j3

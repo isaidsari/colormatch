@@ -1,8 +1,8 @@
 import { Game } from './game.js';
 
-let shadow: boolean = true;
+var shadow: boolean = true;
 
-if(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
+if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
         shadow = false;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -13,14 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const context = canvas.getContext('2d') as CanvasRenderingContext2D;
 
         const shadowSwitch = document.getElementById('switch') as HTMLInputElement;
-        console.log('dfsg ',shadowSwitch);
-        const shadowText = document.getElementById('switch-label') as HTMLLabelElement;
         shadowSwitch.addEventListener('change', (event) => {
                 shadow = shadowSwitch.checked;
-                (shadow) ? shadowText.innerText = 'HQ' : shadowText.innerText = 'SD';
-                console.log(shadow);
         });
-
         const game = new Game(canvas, context, shadow);
 });
 

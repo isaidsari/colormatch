@@ -1,5 +1,5 @@
 "use strict";
-var CACHE = 'termproject';
+var CACHE = 'COLORGAME';
 addEventListener('install', function (e) {
     console.log(CACHE, e);
 });
