@@ -1,0 +1,22 @@
+{
+        "name": "match three game",
+        "short_name": "match3game",
+        "description": "match (at least) three game",
+        "start_url": "./index.html",
+        "display": "standalone",
+        "background_color": "#282525",
+        "theme_color": "#282525",
+        "icons": [
+                {
+                        "src": "./img/icon/icon128.png",
+                        "sizes": "128x128",
+                        "type": "image/png"
+                },
+                {
+                        "src": "./img/icon/icon512.png",
+                        "sizes": "512x512",
+                        "type": "image/png"
+                }
+        ]
+
+}

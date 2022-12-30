@@ -1,0 +1,27 @@
+body {
+        background-color: #282525;
+        color: #f0f0f0;
+        font-family: 'Inconsolata', monospace;
+}
+
+canvas {
+        margin: 0 auto;
+        border: none;
+        position: absolute;
+}
+
+.game-container {
+        background-color: #282525;
+        box-shadow: 0 0 20px 5px rgba(0, 0, 0, 0.5);
+        border-radius: 10px;
+        position: relative;
+        margin: auto;
+        overflow: hidden;
+
+        width: 380px;
+        height: 600px;
+}
+
+.game-area {
+        display: block;
+}
