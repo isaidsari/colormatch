@@ -14,7 +14,7 @@ export class Game {
         private ballSize: number = 20;
         private ballSpacing: number = this.ballSize + 5;
 
-        private colors: string[] = ['#7f8c8d', '#3498db', '#d91e18'] // '#e74c3c' 
+        private colors: string[] = ['#7f8c8d', '#3498db', '#e74c3c'] // '#d91e18' 
 
         public shadow: boolean = false;
         private score: number = 0;
@@ -64,6 +64,8 @@ export class Game {
                 });
 
                 this.updateBoard();
+
+                this.score = 0;
         }
 
         public getBallAt(x: number, y: number): Ball {

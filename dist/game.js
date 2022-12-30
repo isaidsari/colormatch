@@ -9,7 +9,7 @@ export class Game {
         this.padding = 30;
         this.ballSize = 20;
         this.ballSpacing = this.ballSize + 5;
-        this.colors = ['#7f8c8d', '#3498db', '#d91e18']; // '#e74c3c' 
+        this.colors = ['#7f8c8d', '#3498db', '#e74c3c']; // '#d91e18' 
         this.shadow = false;
         this.score = 0;
         this.canvas.style.cursor = 'grab';
@@ -42,6 +42,7 @@ export class Game {
             this.drawBoard();
         });
         this.updateBoard();
+        this.score = 0;
     }
     getBallAt(x, y) {
         const distance = (x, y, ball) => { return Math.sqrt(Math.pow(x - ball.x, 2) + Math.pow(y - ball.y, 2)); };
