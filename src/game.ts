@@ -16,13 +16,17 @@ export class Game {
 
         private colors: string[] = ['#7f8c8d', '#3498db', '#e74c3c'] // '#d91e18' 
 
-        public shadow: boolean = false;
+        public shadow: boolean = true;
         private score: number = 0;
 
 
         constructor(
                 private canvas: HTMLCanvasElement,
-                private context: CanvasRenderingContext2D) {
+                private context: CanvasRenderingContext2D,
+        ) {
+
+                if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
+                        this.shadow = false;
 
                 this.canvas.style.cursor = 'grab';
 

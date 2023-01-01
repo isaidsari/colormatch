@@ -10,8 +10,10 @@ export class Game {
         this.ballSize = 20;
         this.ballSpacing = this.ballSize + 5;
         this.colors = ['#7f8c8d', '#3498db', '#e74c3c']; // '#d91e18' 
-        this.shadow = false;
+        this.shadow = true;
         this.score = 0;
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
+            this.shadow = false;
         this.canvas.style.cursor = 'grab';
         this.witdh = this.canvas.width;
         this.height = this.canvas.height;
