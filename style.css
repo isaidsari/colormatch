@@ -24,12 +24,6 @@ canvas {
         height: 600px;
 }
 
-@media screen and (max-width: 400px) {
-        .game-container {
-                margin-top: 10px;
-        }
-}
-
 .game-area {
         display: block;
 }
@@ -91,9 +85,23 @@ canvas {
 a.ref {
         text-decoration: none;
         color: #f0f0f0;
-        transition: all 0.3s ease;
         position: absolute;
         bottom: 10px;
         left: 50%;
         transform: translate(-50%, 0);
+}
+
+@media screen and (max-width: 400px) {
+        .game-container {
+                margin-top: 10px;
+        }
+}
+
+@media screen and (max-height: 600px) {
+        .game-container {
+                margin-top: 0px;
+        }
+        a.ref {
+                visibility: hidden;
+        }
 }
