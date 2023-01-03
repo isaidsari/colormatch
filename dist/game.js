@@ -12,6 +12,12 @@ export class Game {
         this.colors = ['#7f8c8d', '#3498db', '#e74c3c']; // '#d91e18' 
         this.shadow = true;
         this.score = 0;
+        this.canvas.addEventListener('mousedown', (event) => { this.onPressHandle(event); });
+        this.canvas.addEventListener('touchstart', (event) => { this.onPressHandle(event); });
+        this.canvas.addEventListener('mousemove', (event) => { this.onMoveHandle(event); });
+        this.canvas.addEventListener('touchmove', (event) => { this.onMoveHandle(event); });
+        this.canvas.addEventListener('mouseup', (event) => { this.onReleaseHandle(event); });
+        this.canvas.addEventListener('touchend', (event) => { this.onReleaseHandle(event); });
         if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
             this.shadow = false;
         this.canvas.style.cursor = 'grab';
@@ -32,12 +38,6 @@ export class Game {
             x = this.padding;
             y += this.ballSize + this.ballSpacing;
         }
-        this.canvas.addEventListener('mousedown', (event) => { this.onPressHandle(event); });
-        this.canvas.addEventListener('touchstart', (event) => { this.onPressHandle(event); });
-        this.canvas.addEventListener('mousemove', (event) => { this.onMoveHandle(event); });
-        this.canvas.addEventListener('touchmove', (event) => { this.onMoveHandle(event); });
-        this.canvas.addEventListener('mouseup', (event) => { this.onReleaseHandle(event); });
-        this.canvas.addEventListener('touchend', (event) => { this.onReleaseHandle(event); });
         const shadowSwitch = document.getElementById('switch');
         shadowSwitch.addEventListener('change', (event) => {
             this.shadow = shadowSwitch.checked;

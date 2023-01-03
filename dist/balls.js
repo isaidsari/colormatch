@@ -5,10 +5,10 @@ export class Ball {
         this.radius = radius;
         this.color = color;
     }
-    draw(canvas, context, shadow) {
+    draw(canvas, context, shadow = false) {
         context.beginPath();
         if (shadow) {
-            context.shadowColor = '#1c2d40';
+            context.shadowColor = Ball.shadowColor;
             context.shadowBlur = 10;
         }
         else {
@@ -60,3 +60,4 @@ export class Ball {
         return new Ball(this.x, this.y, this.radius, this.color);
     }
 }
+Ball.shadowColor = '#1c2d40';

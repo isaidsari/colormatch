@@ -1,5 +1,7 @@
 export class Ball {
 
+        static shadowColor: string = '#1c2d40';
+
         constructor(
                 public x: number,
                 public y: number,
@@ -7,10 +9,10 @@ export class Ball {
                 public color: string) {
         }
 
-        public draw(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D, shadow: boolean): void {
+        public draw(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D, shadow: boolean = false): void {
                 context.beginPath();
                 if (shadow) {
-                        context.shadowColor = '#1c2d40';
+                        context.shadowColor = Ball.shadowColor;
                         context.shadowBlur = 10;
                 } else {
                         context.shadowColor = 'transparent';

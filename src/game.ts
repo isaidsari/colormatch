@@ -25,6 +25,16 @@ export class Game {
                 private context: CanvasRenderingContext2D,
         ) {
 
+                this.canvas.addEventListener('mousedown', (event) => { this.onPressHandle(event) });
+                this.canvas.addEventListener('touchstart', (event) => { this.onPressHandle(event) });
+
+                this.canvas.addEventListener('mousemove', (event) => { this.onMoveHandle(event) });
+                this.canvas.addEventListener('touchmove', (event) => { this.onMoveHandle(event) });
+
+                this.canvas.addEventListener('mouseup', (event) => { this.onReleaseHandle(event) });
+                this.canvas.addEventListener('touchend', (event) => { this.onReleaseHandle(event) });
+                
+
                 if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
                         this.shadow = false;
 
@@ -51,15 +61,6 @@ export class Game {
                         x = this.padding;
                         y += this.ballSize + this.ballSpacing;
                 }
-
-                this.canvas.addEventListener('mousedown', (event) => { this.onPressHandle(event) });
-                this.canvas.addEventListener('touchstart', (event) => { this.onPressHandle(event) });
-
-                this.canvas.addEventListener('mousemove', (event) => { this.onMoveHandle(event) });
-                this.canvas.addEventListener('touchmove', (event) => { this.onMoveHandle(event) });
-
-                this.canvas.addEventListener('mouseup', (event) => { this.onReleaseHandle(event) });
-                this.canvas.addEventListener('touchend', (event) => { this.onReleaseHandle(event) });
 
                 const shadowSwitch = document.getElementById('switch') as HTMLInputElement;
                 shadowSwitch.addEventListener('change', (event) => {
