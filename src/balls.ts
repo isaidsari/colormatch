@@ -21,6 +21,20 @@ export class Ball {
                 context.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
                 context.fillStyle = this.color;
                 context.fill();
+                // animate
+                let r = this.radius;
+                let i = 0;
+                let interval = setInterval(() => {
+                        context.beginPath();
+                        context.arc(this.x, this.y, r, 0, Math.PI * 2, false);
+                        context.fillStyle = this.color;
+                        context.fill();
+                        r += 1;
+                        i++;
+                        if (i > 5) {
+                                clearInterval(interval);
+                        }
+                }, 50);
         }
 
         public drawShadow(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D): void {
