@@ -1,3 +1,12 @@
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 import { Ball } from './balls.js';
 export class Game {
     constructor(canvas, context) {
@@ -23,29 +32,33 @@ export class Game {
         this.canvas.style.cursor = 'grab';
         this.witdh = this.canvas.width;
         this.height = this.canvas.height;
-        let ballsPerRow = Math.floor((this.witdh - this.padding * 2) / (this.ballSize + (this.ballSpacing))) + 1;
-        let ballsPerColumn = Math.floor((this.height - this.padding * 2) / (this.ballSize + this.ballSpacing)) + 1;
-        const randomColor = () => { return this.colors[Math.floor(Math.random() * this.colors.length)]; };
-        let x = this.padding;
-        let y = this.padding;
-        for (let i = 0; i < ballsPerColumn; i++) {
-            let row = [];
-            for (let j = 0; j < ballsPerRow; j++) {
-                row.push(new Ball(x, y, this.ballSize, randomColor()));
-                x += this.ballSize + this.ballSpacing;
+    }
+    run() {
+        return __awaiter(this, void 0, void 0, function* () {
+            let ballsPerRow = Math.floor((this.witdh - this.padding * 2) / (this.ballSize + (this.ballSpacing))) + 1;
+            let ballsPerColumn = Math.floor((this.height - this.padding * 2) / (this.ballSize + this.ballSpacing)) + 1;
+            const randomColor = () => { return this.colors[Math.floor(Math.random() * this.colors.length)]; };
+            let x = this.padding;
+            let y = this.padding;
+            for (let i = 0; i < ballsPerColumn; i++) {
+                let row = [];
+                for (let j = 0; j < ballsPerRow; j++) {
+                    row.push(new Ball(x, y, this.ballSize, randomColor()));
+                    x += this.ballSize + this.ballSpacing;
+                }
+                this.balls.push(row);
+                x = this.padding;
+                y += this.ballSize + this.ballSpacing;
             }
-            this.balls.push(row);
-            x = this.padding;
-            y += this.ballSize + this.ballSpacing;
-        }
-        const shadowSwitch = document.getElementById('switch');
-        shadowSwitch.addEventListener('change', (event) => {
-            this.shadow = shadowSwitch.checked;
-            this.drawBoard();
+            const shadowSwitch = document.getElementById('switch');
+            shadowSwitch.addEventListener('change', (event) => {
+                this.shadow = shadowSwitch.checked;
+                this.drawBoard();
+            });
+            this.updateBoard();
+            this.score = 0;
+            this.updateScore();
         });
-        this.updateBoard();
-        this.score = 0;
-        this.updateScore();
     }
     getBallAt(x, y) {
         const distance = (x, y, ball) => { return Math.sqrt(Math.pow(x - ball.x, 2) + Math.pow(y - ball.y, 2)); };
@@ -198,6 +211,7 @@ export class Game {
         }
     }
     onMoveHandle(event) {
+        // MouseEvent - TouchEvent <- UIEvent
         if (this.draggingBall == null)
             return;
         if (event instanceof MouseEvent) {
@@ -205,6 +219,7 @@ export class Game {
                 return;
             }
             else if (event.buttons === 1) {
+                // https://github.com/MasterSais/css-enums/blob/master/index.d.ts
                 this.canvas.style.cursor = 'grabbing';
             }
         }

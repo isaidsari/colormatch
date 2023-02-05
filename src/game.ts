@@ -43,6 +43,10 @@ export class Game {
                 this.witdh = this.canvas.width;
                 this.height = this.canvas.height;
 
+        }
+
+        public async run() : Promise<void> {
+
                 let ballsPerRow = Math.floor((this.witdh - this.padding * 2) / (this.ballSize + (this.ballSpacing))) + 1;
                 let ballsPerColumn = Math.floor((this.height - this.padding * 2) / (this.ballSize + this.ballSpacing)) + 1;
 
@@ -72,7 +76,6 @@ export class Game {
 
                 this.score = 0;
                 this.updateScore();
-
         }
 
         public getBallAt(x: number, y: number): Ball {
@@ -243,6 +246,7 @@ export class Game {
         }
 
         private onMoveHandle(event: MouseEvent | TouchEvent): void {
+                // MouseEvent - TouchEvent <- UIEvent
                 if (this.draggingBall == null)
                         return;
 
@@ -250,6 +254,7 @@ export class Game {
                         if ((event as MouseEvent).buttons === 0) {
                                 return;
                         } else if ((event as MouseEvent).buttons === 1) {
+                                // https://github.com/MasterSais/css-enums/blob/master/index.d.ts
                                 this.canvas.style.cursor = 'grabbing';
                         }
                 }

@@ -9,7 +9,7 @@ export class Ball {
                 public color: string) {
         }
 
-        public draw(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D, shadow: boolean = false): void {
+        public async draw(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D, shadow: boolean = false): Promise<void> {
                 context.beginPath();
                 if (shadow) {
                         context.shadowColor = Ball.shadowColor;

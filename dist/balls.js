@@ -1,3 +1,12 @@
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 export class Ball {
     constructor(x, y, radius, color) {
         this.x = x;
@@ -6,18 +15,20 @@ export class Ball {
         this.color = color;
     }
     draw(canvas, context, shadow = false) {
-        context.beginPath();
-        if (shadow) {
-            context.shadowColor = Ball.shadowColor;
-            context.shadowBlur = 10;
-        }
-        else {
-            context.shadowColor = 'transparent';
-            context.shadowBlur = 0;
-        }
-        context.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
-        context.fillStyle = this.color;
-        context.fill();
+        return __awaiter(this, void 0, void 0, function* () {
+            context.beginPath();
+            if (shadow) {
+                context.shadowColor = Ball.shadowColor;
+                context.shadowBlur = 10;
+            }
+            else {
+                context.shadowColor = 'transparent';
+                context.shadowBlur = 0;
+            }
+            context.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
+            context.fillStyle = this.color;
+            context.fill();
+        });
     }
     drawShadow(canvas, context) {
         context.beginPath();
