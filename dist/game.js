@@ -8,6 +8,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import { Ball } from './balls.js';
+const VERSION = '0.0.2';
 export class Game {
     constructor(canvas, context) {
         this.canvas = canvas;
@@ -32,6 +33,16 @@ export class Game {
         this.canvas.style.cursor = 'grab';
         this.witdh = this.canvas.width;
         this.height = this.canvas.height;
+        const versionElement = document.createElement('span');
+        versionElement.id = 'version';
+        versionElement.classList.add('version');
+        versionElement.style.position = 'absolute';
+        versionElement.style.bottom = '0';
+        versionElement.style.right = '0';
+        versionElement.style.padding = '0.5rem';
+        document.body.appendChild(versionElement);
+        const version = document.getElementById('version');
+        version.innerText = VERSION;
     }
     run() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -76,19 +87,21 @@ export class Game {
         return foundBall;
     }
     drawBoard() {
-        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.context.fillStyle = '#2c3e50';
-        this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        this.balls.forEach((row) => {
-            row.forEach((ball) => {
-                if (ball != this.draggingBall)
-                    ball.draw(this.canvas, this.context, this.shadow);
+        return __awaiter(this, void 0, void 0, function* () {
+            this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.context.fillStyle = '#2c3e50';
+            this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.balls.forEach((row) => {
+                row.forEach((ball) => {
+                    if (ball != this.draggingBall)
+                        ball.draw(this.canvas, this.context, this.shadow);
+                });
             });
+            if (this.draggingBall != null) {
+                this.draggingBall.draw(this.canvas, this.context, this.shadow);
+                this.draggingBall.drawBorder(this.canvas, this.context);
+            }
         });
-        if (this.draggingBall != null) {
-            this.draggingBall.draw(this.canvas, this.context, this.shadow);
-            this.draggingBall.drawBorder(this.canvas, this.context);
-        }
     }
     updateScore() {
         document.getElementById('score').innerHTML = this.score.toString();

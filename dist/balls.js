@@ -25,11 +25,11 @@ export class Ball {
                 context.shadowColor = 'transparent';
                 context.shadowBlur = 0;
             }
-            context.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
-            context.fillStyle = this.color;
-            context.fill();
+            //context.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
+            //context.fillStyle = this.color;
+            //context.fill();
             // animate
-            let r = this.radius;
+            let r = this.radius - 10;
             let i = 0;
             let interval = setInterval(() => {
                 context.beginPath();
@@ -38,10 +38,15 @@ export class Ball {
                 context.fill();
                 r += 1;
                 i++;
-                if (i > 5) {
+                if (i > 10) {
                     clearInterval(interval);
                 }
-            }, 50);
+            }, 10);
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    resolve();
+                }, 100);
+            });
         });
     }
     drawShadow(canvas, context) {

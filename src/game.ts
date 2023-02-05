@@ -1,5 +1,7 @@
 import { Ball } from './balls.js';
 
+const VERSION = '0.0.2';
+
 export class Game {
 
         private balls: Ball[][] = [];
@@ -33,7 +35,7 @@ export class Game {
 
                 this.canvas.addEventListener('mouseup', (event) => { this.onReleaseHandle(event) });
                 this.canvas.addEventListener('touchend', (event) => { this.onReleaseHandle(event) });
-                
+
 
                 if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
                         this.shadow = false;
@@ -43,9 +45,20 @@ export class Game {
                 this.witdh = this.canvas.width;
                 this.height = this.canvas.height;
 
+                const versionElement = document.createElement('span');
+                versionElement.id = 'version';
+                versionElement.classList.add('version');
+                versionElement.style.position = 'absolute';
+                versionElement.style.bottom = '0';
+                versionElement.style.right = '0';
+                versionElement.style.padding = '0.5rem';
+                document.body.appendChild(versionElement);
+                const version = document.getElementById('version') as HTMLSpanElement;
+                version.innerText = VERSION;
+
         }
 
-        public async run() : Promise<void> {
+        public async run(): Promise<void> {
 
                 let ballsPerRow = Math.floor((this.witdh - this.padding * 2) / (this.ballSize + (this.ballSpacing))) + 1;
                 let ballsPerColumn = Math.floor((this.height - this.padding * 2) / (this.ballSize + this.ballSpacing)) + 1;
@@ -95,7 +108,7 @@ export class Game {
                 return foundBall;
         }
 
-        public drawBoard(): void {
+        public async drawBoard(): Promise<void> {
                 this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
                 this.context.fillStyle = '#2c3e50';
                 this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
