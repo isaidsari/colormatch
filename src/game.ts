@@ -1,338 +1,499 @@
 import { Ball } from './balls.js';
+import { Particle, ScorePopup } from './particle.js';
 
-const VERSION = '0.0.2';
+const enum State {
+    IDLE,
+    DRAGGING,
+    SWAP_ANIM,
+    BREAK_ANIM,
+    FALL_ANIM,
+}
+
+const COLORS = [
+    '#ff0054', // red
+    '#00e5ff', // cyan
+    '#b388ff', // lavender
+    '#ffea00', // yellow
+    '#00e676', // green
+    '#2979ff', // blue
+    '#ff6d00', // orange
+];
 
 export class Game {
+    // Grid
+    private grid: Ball[][] = [];
+    private rows = 12;
+    private cols = 8;
+    private cellSize = 44;
+    private ballRadius = 18;
+    private offsetX: number;
+    private offsetY: number;
 
-        private balls: Ball[][] = [];
+    // State
+    private state: State = State.FALL_ANIM;
+    private dragging: Ball | null = null;
+    private dragOrigin: { x: number; y: number } | null = null;
+    private swap1: Ball | null = null;
+    private swap2: Ball | null = null;
+    private swapIsReverse = false;
+    private animId = 0;
 
-        private draggingBall: Ball = null;
-        private originalBall: Ball = null;
+    // Effects
+    private particles: Particle[] = [];
+    private popups: ScorePopup[] = [];
 
-        private witdh: number;
-        private height: number;
+    // Score
+    private score = 0;
+    private combo = 0;
+    private highScore = 0;
+    private numColors = 5;
 
-        private padding: number = 30;
-        private ballSize: number = 20;
-        private ballSpacing: number = this.ballSize + 5;
+    // UI refs
+    private elScore: HTMLElement;
+    private elCombo: HTMLElement;
+    private elHigh: HTMLElement;
 
-        private colors: string[] = ['#7f8c8d', '#3498db', '#e74c3c'] // '#d91e18' 
+    constructor(
+        private canvas: HTMLCanvasElement,
+        private ctx: CanvasRenderingContext2D,
+    ) {
+        this.offsetX = (canvas.width - (this.cols - 1) * this.cellSize) / 2;
+        this.offsetY = (canvas.height - (this.rows - 1) * this.cellSize) / 2;
 
-        public shadow: boolean = true;
-        private score: number = 0;
+        this.elScore = document.getElementById('score')!;
+        this.elCombo = document.getElementById('combo')!;
+        this.elHigh = document.getElementById('high-score')!;
 
+        this.highScore = parseInt(localStorage.getItem('colormatch-hs') || '0');
 
-        constructor(
-                private canvas: HTMLCanvasElement,
-                private context: CanvasRenderingContext2D,
-        ) {
+        this.bindEvents();
+        this.init();
+    }
 
-                this.canvas.addEventListener('mousedown', (event) => { this.onPressHandle(event) });
-                this.canvas.addEventListener('touchstart', (event) => { this.onPressHandle(event) });
+    private init(): void {
+        cancelAnimationFrame(this.animId);
+        this.score = 0;
+        this.combo = 0;
+        this.particles = [];
+        this.popups = [];
+        this.numColors = 5;
+        this.state = State.FALL_ANIM;
 
-                this.canvas.addEventListener('mousemove', (event) => { this.onMoveHandle(event) });
-                this.canvas.addEventListener('touchmove', (event) => { this.onMoveHandle(event) });
+        this.buildGrid();
+        this.purgeInitialMatches();
+        this.cascadeEntrance();
+        this.updateUI();
+        this.animId = requestAnimationFrame(this.tick);
+    }
 
-                this.canvas.addEventListener('mouseup', (event) => { this.onReleaseHandle(event) });
-                this.canvas.addEventListener('touchend', (event) => { this.onReleaseHandle(event) });
+    public restart(): void {
+        this.init();
+    }
 
+    // ── Grid ──────────────────────────────────────────
 
-                if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
-                        this.shadow = false;
+    private pos(r: number, c: number) {
+        return {
+            x: this.offsetX + c * this.cellSize,
+            y: this.offsetY + r * this.cellSize,
+        };
+    }
 
-                this.canvas.style.cursor = 'grab';
+    private cell(px: number, py: number) {
+        const c = Math.round((px - this.offsetX) / this.cellSize);
+        const r = Math.round((py - this.offsetY) / this.cellSize);
+        if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) return { r, c };
+        return null;
+    }
 
-                this.witdh = this.canvas.width;
-                this.height = this.canvas.height;
+    private rndColor() {
+        return COLORS[Math.floor(Math.random() * this.numColors)];
+    }
 
-                const versionElement = document.createElement('span');
-                versionElement.id = 'version';
-                versionElement.classList.add('version');
-                versionElement.style.position = 'absolute';
-                versionElement.style.bottom = '0';
-                versionElement.style.right = '0';
-                versionElement.style.padding = '0.5rem';
-                document.body.appendChild(versionElement);
-                const version = document.getElementById('version') as HTMLSpanElement;
-                version.innerText = VERSION;
-
+    private buildGrid(): void {
+        this.grid = [];
+        for (let r = 0; r < this.rows; r++) {
+            this.grid[r] = [];
+            for (let c = 0; c < this.cols; c++) {
+                const p = this.pos(r, c);
+                const b = new Ball(p.x, p.y, this.ballRadius, this.rndColor());
+                b.row = r;
+                b.col = c;
+                this.grid[r][c] = b;
+            }
         }
+    }
 
-        public async run(): Promise<void> {
-
-                let ballsPerRow = Math.floor((this.witdh - this.padding * 2) / (this.ballSize + (this.ballSpacing))) + 1;
-                let ballsPerColumn = Math.floor((this.height - this.padding * 2) / (this.ballSize + this.ballSpacing)) + 1;
-
-                const randomColor = (): string => { return this.colors[Math.floor(Math.random() * this.colors.length)] };
-
-                let x = this.padding;
-                let y = this.padding;
-
-                for (let i = 0; i < ballsPerColumn; i++) {
-                        let row: Ball[] = [];
-                        for (let j = 0; j < ballsPerRow; j++) {
-                                row.push(new Ball(x, y, this.ballSize, randomColor()));
-                                x += this.ballSize + this.ballSpacing;
-                        }
-                        this.balls.push(row);
-                        x = this.padding;
-                        y += this.ballSize + this.ballSpacing;
-                }
-
-                const shadowSwitch = document.getElementById('switch') as HTMLInputElement;
-                shadowSwitch.addEventListener('change', (event) => {
-                        this.shadow = shadowSwitch.checked;
-                        this.drawBoard();
-                });
-
-                this.updateBoard();
-
-                this.score = 0;
-                this.updateScore();
+    private purgeInitialMatches(): void {
+        for (let i = 0; i < 200; i++) {
+            const m = this.findMatches();
+            if (m.length === 0) break;
+            for (const g of m) for (const b of g) b.color = this.rndColor();
         }
+    }
 
-        public getBallAt(x: number, y: number): Ball {
-                const distance = (x: number, y: number, ball: Ball): number => { return Math.sqrt(Math.pow(x - ball.x, 2) + Math.pow(y - ball.y, 2)) };
-
-                let foundBall: Ball = null;
-                this.balls.forEach((row) => {
-                        row.forEach((ball) => {
-                                if (distance(x, y, ball) < this.ballSize && ball != this.draggingBall) {
-                                        foundBall = ball;
-                                }
-                        });
-                });
-                if (foundBall == null) {
-                        // throw new Error('no ball found');
-                }
-                return foundBall;
+    private cascadeEntrance(): void {
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                const b = this.grid[r][c];
+                b.y = b.targetY - this.canvas.height - r * 20 - Math.random() * 10;
+            }
         }
+    }
 
-        public async drawBoard(): Promise<void> {
-                this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                this.context.fillStyle = '#2c3e50';
-                this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    // ── Match finding ─────────────────────────────────
 
-                this.balls.forEach((row) => {
-                        row.forEach((ball) => {
-                                if (ball != this.draggingBall)
-                                        ball.draw(this.canvas, this.context, this.shadow);
-                        });
-                });
+    private findMatches(): Ball[][] {
+        const matches: Ball[][] = [];
 
-                if (this.draggingBall != null) {
-                        this.draggingBall.draw(this.canvas, this.context, this.shadow);
-                        this.draggingBall.drawBorder(this.canvas, this.context);
-                }
-        }
-
-        private updateScore(): void {
-                document.getElementById('score').innerHTML = this.score.toString();
-        }
-
-        public updateBoard(): void {
-
-                let matches = this.findMatches();
-
-                let brokenBalls = this.breakMatches(matches);
-
-                matches = this.findMatches();
-                while (matches.length > 0) {
-                        this.breakMatches(matches);
-                        this.fillBoard();
-                        matches = this.findMatches();
-                }
-
-                this.score += brokenBalls;
-                this.updateScore();
-
-                this.drawBoard();
-        }
-
-        private showMatches(matches: Ball[][]): void {
-                if (matches.length > 0) {
-                        matches.forEach((match) => {
-                                this.context.beginPath();
-                                match.forEach((ball) => {
-                                        this.context.lineTo(ball.x, ball.y);
-                                });
-                                this.context.strokeStyle = '#ecf0f1';
-                                this.context.stroke();
-                        });
-                }
-        }
-
-        public fillBoard(): void {
-                this.balls.forEach((row) => {
-                        row.forEach((ball) => {
-                                if (ball.color == 'transparent') {
-                                        ball.color = this.colors[Math.floor(Math.random() * this.colors.length)];
-                                }
-                        });
-                });
-        }
-
-        public findMatches(): Ball[][] {
-                let matches: Ball[][] = [];
-                this.balls.forEach((row) => {
-                        let match: Ball[] = [];
-                        row.forEach((ball) => {
-                                if (match.length == 0) {
-                                        match.push(ball);
-                                } else if (match[0].color == ball.color) {
-                                        match.push(ball);
-                                } else {
-                                        if (match.length >= 3) {
-                                                matches.push(match);
-                                        }
-                                        match = [ball];
-                                }
-                        });
-                        if (match.length >= 3) {
-                                matches.push(match);
-                        }
-                });
-                const getColumnIndex = (ball: Ball): number => {
-                        let index: number = null;
-                        this.balls.forEach((row) => {
-                                row.forEach((column) => {
-                                        if (column == ball) {
-                                                index = row.indexOf(column);
-                                        }
-                                });
-                        });
-                        return index;
-                };
-                this.balls[0].forEach((column) => {
-                        let match: Ball[] = [];
-                        this.balls.forEach((row) => {
-                                if (match.length == 0) {
-                                        match.push(row[getColumnIndex(column)]);
-                                } else if (match[0].color == row[getColumnIndex(column)].color) {
-                                        match.push(row[getColumnIndex(column)]);
-                                } else {
-                                        if (match.length >= 3) {
-                                                matches.push(match);
-                                        }
-                                        match = [row[getColumnIndex(column)]];
-                                }
-                        });
-                        if (match.length >= 3) {
-                                matches.push(match);
-                        }
-                }
-                );
-                return matches;
-        }
-
-        public breakMatches(matches: Ball[][]): number {
-                let brokenBalls = 0;
-                matches.forEach((match) => {
-                        match.forEach((ball) => {
-                                this.balls.forEach((row) => {
-                                        row.forEach((column) => {
-                                                if (column == ball) {
-                                                        row[row.indexOf(column)] = new Ball(column.x, column.y, this.ballSize, 'transparent');
-                                                        brokenBalls++;
-                                                }
-                                        });
-                                });
-                        });
-                });
-                return brokenBalls;
-        }
-
-        private onPressHandle(event: MouseEvent | TouchEvent): void {
-                if (event instanceof MouseEvent)
-                        this.canvas.style.cursor = 'grabbing';
-
-                if (event instanceof TouchEvent)
-                        event.preventDefault();
-
-                let coord: { x: number, y: number } = this.getCoordFromEvent(event);
-
-                let ball = this.getBallAt(coord.x, coord.y);
-                if (ball != null) {
-                        this.originalBall = ball.clone();
-                        this.draggingBall = ball;
-                }
-        }
-
-        private onMoveHandle(event: MouseEvent | TouchEvent): void {
-                // MouseEvent - TouchEvent <- UIEvent
-                if (this.draggingBall == null)
-                        return;
-
-                if (event instanceof MouseEvent) {
-                        if ((event as MouseEvent).buttons === 0) {
-                                return;
-                        } else if ((event as MouseEvent).buttons === 1) {
-                                // https://github.com/MasterSais/css-enums/blob/master/index.d.ts
-                                this.canvas.style.cursor = 'grabbing';
-                        }
-                }
-                if (event instanceof TouchEvent) {
-                        event.preventDefault();
-                }
-
-                let coord: { x: number, y: number } = this.getCoordFromEvent(event);
-                this.draggingBall.move(coord.x, coord.y);
-
-                this.drawBoard();
-        }
-
-        private onReleaseHandle(event: MouseEvent | TouchEvent): void {
-                if (this.draggingBall == null)
-                        return;
-
-                if (event instanceof MouseEvent)
-                        this.canvas.style.cursor = 'grab';
-
-                let coord: { x: number, y: number } = this.getCoordFromEvent(event);
-
-                const swap = (dragBall: Ball, targetBall: Ball): void => {
-                        dragBall.move(this.originalBall.x, this.originalBall.y);
-                        dragBall.swap(targetBall);
-
-                        let dragBallIdx = { x: this.balls.indexOf(this.balls.find((row) => row.indexOf(dragBall) != -1)), y: this.balls[this.balls.indexOf(this.balls.find((row) => row.indexOf(dragBall) != -1))].indexOf(dragBall) };
-                        let targetBallIdx = { x: this.balls.indexOf(this.balls.find((row) => row.indexOf(targetBall) != -1)), y: this.balls[this.balls.indexOf(this.balls.find((row) => row.indexOf(targetBall) != -1))].indexOf(targetBall) };
-
-                        this.balls[dragBallIdx.x][dragBallIdx.y] = targetBall;
-                        this.balls[targetBallIdx.x][targetBallIdx.y] = dragBall;
-                };
-
-                let ball = this.getBallAt(coord.x, coord.y);
-                if (this.originalBall.canSwap(ball)) {
-                        swap(this.draggingBall, ball);
+        // Horizontal
+        for (let r = 0; r < this.rows; r++) {
+            let run: Ball[] = [this.grid[r][0]];
+            for (let c = 1; c < this.cols; c++) {
+                const b = this.grid[r][c];
+                if (b.color === run[0].color) {
+                    run.push(b);
                 } else {
-                        this.draggingBall.move(this.originalBall.x, this.originalBall.y);
+                    if (run.length >= 3) matches.push(run);
+                    run = [b];
                 }
-
-                this.draggingBall = null;
-                this.originalBall = null;
-
-                this.updateBoard();
+            }
+            if (run.length >= 3) matches.push(run);
         }
 
-        private getCoordFromEvent(event: MouseEvent | TouchEvent): { x: number, y: number } {
-                let x: number;
-                let y: number;
-                if (event instanceof MouseEvent) {
-                        x = event.clientX;
-                        y = event.clientY;
+        // Vertical
+        for (let c = 0; c < this.cols; c++) {
+            let run: Ball[] = [this.grid[0][c]];
+            for (let r = 1; r < this.rows; r++) {
+                const b = this.grid[r][c];
+                if (b.color === run[0].color) {
+                    run.push(b);
                 } else {
-                        if (event.touches.length == 0) {
-                                x = event.changedTouches[0].clientX;
-                                y = event.changedTouches[0].clientY;
-                        } else {
-                                x = event.touches[0].clientX;
-                                y = event.touches[0].clientY;
-                        }
+                    if (run.length >= 3) matches.push(run);
+                    run = [b];
                 }
-                let rect = this.canvas.getBoundingClientRect();
-                x -= rect.left;
-                y -= rect.top;
-                return { x, y };
+            }
+            if (run.length >= 3) matches.push(run);
         }
 
+        return matches;
+    }
+
+    // ── Game logic ────────────────────────────────────
+
+    private processMatches(): void {
+        const matches = this.findMatches();
+
+        if (matches.length === 0) {
+            this.combo = 0;
+            this.state = State.IDLE;
+            this.updateUI();
+            return;
+        }
+
+        this.combo++;
+
+        const set = new Set<Ball>();
+        for (const g of matches) for (const b of g) set.add(b);
+
+        const pts = set.size * 10 * this.combo;
+        this.score += pts;
+
+        if (this.score > this.highScore) {
+            this.highScore = this.score;
+            localStorage.setItem('colormatch-hs', String(this.highScore));
+        }
+
+        // Difficulty progression
+        if (this.score >= 1500 && this.numColors < 7) this.numColors = 7;
+        else if (this.score >= 600 && this.numColors < 6) this.numColors = 6;
+
+        // Effects
+        let sumX = 0, sumY = 0;
+        for (const b of set) {
+            this.spawnBurst(b.x, b.y, b.color, 6);
+            b.targetScale = 0;
+            sumX += b.x;
+            sumY += b.y;
+        }
+
+        const cx = sumX / set.size;
+        const cy = sumY / set.size;
+        const label = this.combo > 1 ? `+${pts} x${this.combo}` : `+${pts}`;
+        this.popups.push(new ScorePopup(cx, cy - 10, label, '#fff'));
+
+        this.updateUI();
+        this.state = State.BREAK_ANIM;
+    }
+
+    private gravity(): void {
+        for (let c = 0; c < this.cols; c++) {
+            let write = this.rows - 1;
+
+            // Shift surviving balls down
+            for (let r = this.rows - 1; r >= 0; r--) {
+                const b = this.grid[r][c];
+                if (b.targetScale > 0.5) {
+                    if (r !== write) {
+                        this.grid[write][c] = b;
+                        this.grid[r][c] = null!;
+                        b.row = write;
+                        b.col = c;
+                        const p = this.pos(write, c);
+                        b.targetX = p.x;
+                        b.targetY = p.y;
+                    }
+                    write--;
+                }
+            }
+
+            // Fill empty cells from top
+            for (let r = write; r >= 0; r--) {
+                const p = this.pos(r, c);
+                const startY = -this.ballRadius * 2 - (write - r) * this.cellSize;
+                const nb = new Ball(p.x, startY, this.ballRadius, this.rndColor());
+                nb.targetX = p.x;
+                nb.targetY = p.y;
+                nb.row = r;
+                nb.col = c;
+                nb.scale = 0.6;
+                nb.targetScale = 1;
+                this.grid[r][c] = nb;
+            }
+        }
+
+        this.state = State.FALL_ANIM;
+    }
+
+    // ── FX ────────────────────────────────────────────
+
+    private spawnBurst(x: number, y: number, color: string, n: number): void {
+        for (let i = 0; i < n; i++) {
+            const a = (Math.PI * 2 * i) / n + Math.random() * 0.4;
+            const spd = 2.5 + Math.random() * 3;
+            this.particles.push(
+                new Particle(x, y, Math.cos(a) * spd, Math.sin(a) * spd, 2 + Math.random() * 4, color),
+            );
+        }
+    }
+
+    // ── Input ─────────────────────────────────────────
+
+    private bindEvents(): void {
+        const cv = this.canvas;
+        cv.style.cursor = 'grab';
+
+        cv.addEventListener('mousedown', e => this.onDown(this.mouseXY(e)));
+        cv.addEventListener('mousemove', e => this.onMove(this.mouseXY(e)));
+        cv.addEventListener('mouseup', e => this.onUp(this.mouseXY(e)));
+
+        cv.addEventListener('touchstart', e => { e.preventDefault(); this.onDown(this.touchXY(e)); }, { passive: false });
+        cv.addEventListener('touchmove', e => { e.preventDefault(); this.onMove(this.touchXY(e)); }, { passive: false });
+        cv.addEventListener('touchend', e => { e.preventDefault(); this.onUp(this.touchXY(e)); }, { passive: false });
+    }
+
+    private mouseXY(e: MouseEvent) {
+        const r = this.canvas.getBoundingClientRect();
+        const sx = this.canvas.width / r.width;
+        const sy = this.canvas.height / r.height;
+        return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+    }
+
+    private touchXY(e: TouchEvent) {
+        const t = e.touches[0] || e.changedTouches[0];
+        const r = this.canvas.getBoundingClientRect();
+        const sx = this.canvas.width / r.width;
+        const sy = this.canvas.height / r.height;
+        return { x: (t.clientX - r.left) * sx, y: (t.clientY - r.top) * sy };
+    }
+
+    private onDown(p: { x: number; y: number }): void {
+        if (this.state !== State.IDLE) return;
+
+        const c = this.cell(p.x, p.y);
+        if (!c) return;
+
+        this.dragging = this.grid[c.r][c.c];
+        this.dragOrigin = { x: this.dragging.targetX, y: this.dragging.targetY };
+        this.state = State.DRAGGING;
+        this.canvas.style.cursor = 'grabbing';
+    }
+
+    private onMove(p: { x: number; y: number }): void {
+        if (this.state !== State.DRAGGING || !this.dragging) return;
+        this.dragging.x = p.x;
+        this.dragging.y = p.y;
+    }
+
+    private onUp(p: { x: number; y: number }): void {
+        if (this.state !== State.DRAGGING || !this.dragging) return;
+        this.canvas.style.cursor = 'grab';
+
+        const b = this.dragging;
+        const o = this.dragOrigin!;
+        const dx = p.x - o.x;
+        const dy = p.y - o.y;
+
+        // Snap back visually
+        b.x = b.targetX;
+        b.y = b.targetY;
+
+        let tr = b.row, tc = b.col;
+        if (Math.abs(dx) > this.cellSize * 0.25 || Math.abs(dy) > this.cellSize * 0.25) {
+            if (Math.abs(dx) > Math.abs(dy)) {
+                tc += dx > 0 ? 1 : -1;
+            } else {
+                tr += dy > 0 ? 1 : -1;
+            }
+        }
+
+        this.dragging = null;
+        this.dragOrigin = null;
+
+        if (tr >= 0 && tr < this.rows && tc >= 0 && tc < this.cols && (tr !== b.row || tc !== b.col)) {
+            this.beginSwap(b, this.grid[tr][tc]);
+        } else {
+            this.state = State.IDLE;
+        }
+    }
+
+    private beginSwap(a: Ball, b: Ball): void {
+        this.swap1 = a;
+        this.swap2 = b;
+        this.swapIsReverse = false;
+
+        // Swap in grid
+        this.grid[a.row][a.col] = b;
+        this.grid[b.row][b.col] = a;
+
+        const [ar, ac] = [a.row, a.col];
+        a.row = b.row; a.col = b.col;
+        b.row = ar; b.col = ac;
+
+        const pa = this.pos(a.row, a.col);
+        const pb = this.pos(b.row, b.col);
+        a.targetX = pa.x; a.targetY = pa.y;
+        b.targetX = pb.x; b.targetY = pb.y;
+
+        this.state = State.SWAP_ANIM;
+    }
+
+    private undoSwap(): void {
+        const a = this.swap1!, b = this.swap2!;
+
+        this.grid[a.row][a.col] = b;
+        this.grid[b.row][b.col] = a;
+
+        const [ar, ac] = [a.row, a.col];
+        a.row = b.row; a.col = b.col;
+        b.row = ar; b.col = ac;
+
+        const pa = this.pos(a.row, a.col);
+        const pb = this.pos(b.row, b.col);
+        a.targetX = pa.x; a.targetY = pa.y;
+        b.targetX = pb.x; b.targetY = pb.y;
+
+        this.swapIsReverse = true;
+    }
+
+    // ── Update / Draw ─────────────────────────────────
+
+    private updateBalls(): boolean {
+        let anim = false;
+        for (let r = 0; r < this.rows; r++)
+            for (let c = 0; c < this.cols; c++)
+                if (this.grid[r][c]?.update()) anim = true;
+        return anim;
+    }
+
+    private tick = (): void => {
+        // Physics
+        this.particles = this.particles.filter(p => p.update());
+        this.popups = this.popups.filter(p => p.update());
+        const anim = this.updateBalls();
+
+        // State machine
+        switch (this.state) {
+            case State.SWAP_ANIM:
+                if (!anim) {
+                    if (this.swapIsReverse) {
+                        this.state = State.IDLE;
+                    } else if (this.findMatches().length === 0) {
+                        this.undoSwap();
+                    } else {
+                        this.combo = 0;
+                        this.processMatches();
+                    }
+                }
+                break;
+
+            case State.BREAK_ANIM:
+                if (!anim) this.gravity();
+                break;
+
+            case State.FALL_ANIM:
+                if (!anim) this.processMatches();
+                break;
+        }
+
+        this.draw();
+        this.animId = requestAnimationFrame(this.tick);
+    };
+
+    private draw(): void {
+        const { ctx, canvas } = this;
+        const w = canvas.width, h = canvas.height;
+
+        // Flat BG
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, w, h);
+
+        // Grid lines
+        ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+        ctx.lineWidth = 1;
+        for (let r = 0; r < this.rows; r++) {
+            const y = this.offsetY + r * this.cellSize;
+            ctx.beginPath();
+            ctx.moveTo(this.offsetX - this.cellSize / 2, y);
+            ctx.lineTo(this.offsetX + (this.cols - 1) * this.cellSize + this.cellSize / 2, y);
+            ctx.stroke();
+        }
+        for (let c = 0; c < this.cols; c++) {
+            const x = this.offsetX + c * this.cellSize;
+            ctx.beginPath();
+            ctx.moveTo(x, this.offsetY - this.cellSize / 2);
+            ctx.lineTo(x, this.offsetY + (this.rows - 1) * this.cellSize + this.cellSize / 2);
+            ctx.stroke();
+        }
+
+        // Balls (non-dragging first)
+        for (let r = 0; r < this.rows; r++)
+            for (let c = 0; c < this.cols; c++) {
+                const b = this.grid[r][c];
+                if (b && b !== this.dragging) b.draw(ctx);
+            }
+
+        // Dragging ball on top
+        if (this.dragging) {
+            this.dragging.drawSelected(ctx);
+            this.dragging.draw(ctx);
+        }
+
+        // Particles & popups
+        for (const p of this.particles) p.draw(ctx);
+        for (const p of this.popups) p.draw(ctx);
+    }
+
+    // ── UI ────────────────────────────────────────────
+
+    private updateUI(): void {
+        this.elScore.textContent = String(this.score);
+        this.elHigh.textContent = String(this.highScore);
+        if (this.combo > 1) {
+            this.elCombo.textContent = `COMBO x${this.combo}`;
+            this.elCombo.classList.add('visible');
+        } else {
+            this.elCombo.classList.remove('visible');
+        }
+    }
 }

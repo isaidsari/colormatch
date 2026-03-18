@@ -3,32 +3,40 @@
 
 <head>
         <meta charset="UTF-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>colormatch</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        <title>Color Match</title>
         <link rel="icon" href="./img/icon/icon128.png">
         <link rel="manifest" href="./manifest.json">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="./style.css">
         <script type="module" src="./dist/script.js" defer></script>
 </head>
 
 <body>
-        <div class="game-container">
-                <canvas class="game-area" id="canvas" width="380px" height="600px"></canvas>
+        <div class="wrapper">
+                <header class="header">
+                        <div class="header-item">
+                                <span class="header-label">SCORE</span>
+                                <span class="header-value" id="score">0</span>
+                        </div>
+                        <div class="header-item title">
+                                <span class="game-title">COLOR MATCH</span>
+                                <span class="combo" id="combo"></span>
+                        </div>
+                        <div class="header-item">
+                                <span class="header-label">BEST</span>
+                                <span class="header-value" id="high-score">0</span>
+                        </div>
+                </header>
+
+                <div class="game-container">
+                        <canvas id="canvas" width="380" height="600"></canvas>
+                </div>
+
+                <button class="restart-btn" id="restart">&#8635; NEW GAME</button>
         </div>
-
-        <input type="checkbox" class="shadow-switch" id="switch"> </input>
-        <label for="switch" class="shadow-switch-label" id="switch-label"> </label>
-
-        <div class="score-board">
-                <p class="score" id="score"></p>
-        </div>
-
-        <a href="https://dev.to/timhuang/a-simple-way-to-detect-if-browser-is-on-a-mobile-device-with-javascript-44j3"
-                class="ref">ref</a>
-
 </body>
-
-<script></script>
 
 </html>
