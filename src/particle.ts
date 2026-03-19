@@ -40,7 +40,7 @@ export class ScorePopup {
         public y: number,
         public text: string,
         public color: string,
-    ) {}
+    ) { }
 
     update(): boolean {
         this.y -= 1.2;

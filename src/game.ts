@@ -1,4 +1,4 @@
-import { Ball } from './balls.js';
+import { Ball, updateFaceTime } from './balls.js';
 import { Particle, ScorePopup } from './particle.js';
 
 const enum State {
@@ -10,13 +10,18 @@ const enum State {
 }
 
 const COLORS = [
-    '#E74C3C', // cherry
-    '#F1C40F', // sunflower
-    '#2ECC71', // jade
-    '#3498DB', // sky
-    '#9B59B6', // violet
-    '#E67E22', // coral
+    '#E74C3C', // 0 → personality 0 (smirk)
+    '#F1C40F', // 1 → personality 1 (open)
+    '#2ECC71', // 2 → personality 2 (grin)
+    '#3498DB', // 3 → personality 3 (smug)
+    '#9B59B6', // 4 → personality 4 (flat)
+    '#E67E22', // 5 → personality 5 (worried)
 ];
+
+function colorToIndex(color: string): number {
+    const idx = COLORS.indexOf(color);
+    return idx >= 0 ? idx : 0;
+}
 
 export class Game {
     // Grid
@@ -113,9 +118,11 @@ export class Game {
             this.grid[r] = [];
             for (let c = 0; c < this.cols; c++) {
                 const p = this.pos(r, c);
-                const b = new Ball(p.x, p.y, this.ballRadius, this.rndColor());
+                const color = this.rndColor();
+                const b = new Ball(p.x, p.y, this.ballRadius, color);
                 b.row = r;
                 b.col = c;
+                b.colorIndex = colorToIndex(color);  // ← EKLE
                 this.grid[r][c] = b;
             }
         }
@@ -125,7 +132,10 @@ export class Game {
         for (let i = 0; i < 200; i++) {
             const m = this.findMatches();
             if (m.length === 0) break;
-            for (const g of m) for (const b of g) b.color = this.rndColor();
+            for (const g of m) for (const b of g) {
+                b.color = this.rndColor();
+                b.colorIndex = colorToIndex(b.color);  // ← EKLE
+            }
         }
     }
 
@@ -183,6 +193,10 @@ export class Game {
 
         if (matches.length === 0) {
             this.combo = 0;
+            // Tüm topları idle'a döndür
+            for (let r = 0; r < this.rows; r++)
+                for (let c = 0; c < this.cols; c++)
+                    this.grid[r][c].faceState = 'idle';
             this.state = State.IDLE;
             this.updateUI();
             return;
@@ -195,6 +209,10 @@ export class Game {
 
         const pts = set.size * 10 * this.combo;
         this.score += pts;
+
+        for (const b of set) {
+            b.faceState = 'scared';
+        }
 
         if (this.score > this.highScore) {
             this.highScore = this.score;
@@ -247,6 +265,7 @@ export class Game {
                 const p = this.pos(r, c);
                 const startY = -this.ballRadius * 2 - (write - r) * this.cellSize;
                 const nb = new Ball(p.x, startY, this.ballRadius, this.rndColor());
+                nb.colorIndex = colorToIndex(nb.color);
                 nb.targetX = p.x;
                 nb.targetY = p.y;
                 nb.row = r;
@@ -304,11 +323,10 @@ export class Game {
 
     private onDown(p: { x: number; y: number }): void {
         if (this.state !== State.IDLE) return;
-
         const c = this.cell(p.x, p.y);
         if (!c) return;
-
         this.dragging = this.grid[c.r][c.c];
+        this.dragging.faceState = 'selected';
         this.dragOrigin = { x: this.dragging.targetX, y: this.dragging.targetY };
         this.state = State.DRAGGING;
         this.canvas.style.cursor = 'grabbing';
@@ -323,6 +341,8 @@ export class Game {
     private onUp(p: { x: number; y: number }): void {
         if (this.state !== State.DRAGGING || !this.dragging) return;
         this.canvas.style.cursor = 'grab';
+
+        this.dragging.faceState = 'idle';
 
         const b = this.dragging;
         const o = this.dragOrigin!;
@@ -406,6 +426,7 @@ export class Game {
         this.particles = this.particles.filter(p => p.update());
         this.popups = this.popups.filter(p => p.update());
         const anim = this.updateBalls();
+        updateFaceTime(1 / 60);
 
         // State machine
         switch (this.state) {
