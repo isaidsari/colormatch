@@ -1,3 +1,97 @@
+// Pre-rendered ball sprite cache: color → OffscreenCanvas
+const spriteCache = new Map<string, OffscreenCanvas>();
+const SPRITE_PAD = 6; // extra pixels for shadow
+
+function hexToRgb(hex: string): [number, number, number] {
+    const n = parseInt(hex.slice(1), 16);
+    return [n >> 16, (n >> 8) & 0xff, n & 0xff];
+}
+
+function adjustRgb([r, g, b]: [number, number, number], amt: number): string {
+    return `rgb(${Math.max(0, Math.min(255, r + amt))},${Math.max(0, Math.min(255, g + amt))},${Math.max(0, Math.min(255, b + amt))})`;
+}
+
+function getSprite(color: string, radius: number): OffscreenCanvas {
+    const key = `${color}_${radius}`;
+    let cached = spriteCache.get(key);
+    if (cached) return cached;
+
+    const size = (radius + SPRITE_PAD) * 2;
+    const oc = new OffscreenCanvas(size, size);
+    const ctx = oc.getContext('2d')!;
+    const cx = radius + SPRITE_PAD;
+    const cy = cx;
+    const r = radius;
+    const rgb = hexToRgb(color);
+
+    // Outer shadow (larger, softer)
+    ctx.beginPath();
+    ctx.arc(cx + 1, cy + 3, r + 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fill();
+
+    // Inner shadow (tighter)
+    ctx.beginPath();
+    ctx.arc(cx + 0.5, cy + 1.5, r + 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fill();
+
+    // Base gradient — richer depth
+    const grad = ctx.createRadialGradient(
+        cx - r * 0.3, cy - r * 0.4, r * 0.05,
+        cx + r * 0.05, cy + r * 0.15, r * 1.02,
+    );
+    grad.addColorStop(0, adjustRgb(rgb, 60));
+    grad.addColorStop(0.35, adjustRgb(rgb, 20));
+    grad.addColorStop(0.6, color);
+    grad.addColorStop(0.85, adjustRgb(rgb, -25));
+    grad.addColorStop(1, adjustRgb(rgb, -50));
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Primary specular highlight (top-left)
+    const hl = ctx.createRadialGradient(
+        cx - r * 0.28, cy - r * 0.32, 0,
+        cx - r * 0.15, cy - r * 0.18, r * 0.55,
+    );
+    hl.addColorStop(0, 'rgba(255,255,255,0.65)');
+    hl.addColorStop(0.5, 'rgba(255,255,255,0.18)');
+    hl.addColorStop(1, 'rgba(255,255,255,0)');
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = hl;
+    ctx.fill();
+
+    // Bottom rim light (reflected light from surface)
+    const rim = ctx.createRadialGradient(
+        cx + r * 0.15, cy + r * 0.55, 0,
+        cx + r * 0.1, cy + r * 0.4, r * 0.5,
+    );
+    rim.addColorStop(0, 'rgba(255,255,255,0.12)');
+    rim.addColorStop(1, 'rgba(255,255,255,0)');
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = rim;
+    ctx.fill();
+
+    // Edge definition
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 0.5, 0, Math.PI * 2);
+    ctx.strokeStyle = adjustRgb(rgb, -40);
+    ctx.lineWidth = 0.8;
+    ctx.globalAlpha = 0.3;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    spriteCache.set(key, oc);
+    return oc;
+}
+
 export class Ball {
     public targetX: number;
     public targetY: number;
@@ -44,26 +138,14 @@ export class Ball {
     draw(ctx: CanvasRenderingContext2D): void {
         if (this.scale < 0.02) return;
 
-        const r = this.radius * this.scale;
+        const sprite = getSprite(this.color, this.radius);
+        const s = this.scale;
+        const sw = sprite.width;
+        const sh = sprite.height;
+        const dw = sw * s;
+        const dh = sh * s;
 
-        // Hard shadow offset
-        ctx.beginPath();
-        ctx.arc(this.x + 2, this.y + 3, r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.fill();
-
-        // Flat circle
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = this.color;
-        ctx.fill();
-
-        // Crisp white border
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        ctx.drawImage(sprite, this.x - dw / 2, this.y - dh / 2, dw, dh);
     }
 
     drawSelected(ctx: CanvasRenderingContext2D): void {

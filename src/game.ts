@@ -10,13 +10,12 @@ const enum State {
 }
 
 const COLORS = [
-    '#ff0054', // red
-    '#00e5ff', // cyan
-    '#b388ff', // lavender
-    '#ffea00', // yellow
-    '#00e676', // green
-    '#2979ff', // blue
-    '#ff6d00', // orange
+    '#E74C3C', // cherry
+    '#F1C40F', // sunflower
+    '#2ECC71', // jade
+    '#3498DB', // sky
+    '#9B59B6', // violet
+    '#E67E22', // coral
 ];
 
 export class Game {
@@ -46,7 +45,6 @@ export class Game {
     private score = 0;
     private combo = 0;
     private highScore = 0;
-    private numColors = 5;
 
     // UI refs
     private elScore: HTMLElement;
@@ -76,7 +74,6 @@ export class Game {
         this.combo = 0;
         this.particles = [];
         this.popups = [];
-        this.numColors = 5;
         this.state = State.FALL_ANIM;
 
         this.buildGrid();
@@ -107,7 +104,7 @@ export class Game {
     }
 
     private rndColor() {
-        return COLORS[Math.floor(Math.random() * this.numColors)];
+        return COLORS[Math.floor(Math.random() * COLORS.length)];
     }
 
     private buildGrid(): void {
@@ -204,9 +201,7 @@ export class Game {
             localStorage.setItem('colormatch-hs', String(this.highScore));
         }
 
-        // Difficulty progression
-        if (this.score >= 1500 && this.numColors < 7) this.numColors = 7;
-        else if (this.score >= 600 && this.numColors < 6) this.numColors = 6;
+
 
         // Effects
         let sumX = 0, sumY = 0;
@@ -444,26 +439,20 @@ export class Game {
         const { ctx, canvas } = this;
         const w = canvas.width, h = canvas.height;
 
-        // Flat BG
-        ctx.fillStyle = '#111';
+        // Background
+        ctx.fillStyle = '#141414';
         ctx.fillRect(0, 0, w, h);
 
-        // Grid lines
-        ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-        ctx.lineWidth = 1;
+        // Subtle grid dots
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
         for (let r = 0; r < this.rows; r++) {
-            const y = this.offsetY + r * this.cellSize;
-            ctx.beginPath();
-            ctx.moveTo(this.offsetX - this.cellSize / 2, y);
-            ctx.lineTo(this.offsetX + (this.cols - 1) * this.cellSize + this.cellSize / 2, y);
-            ctx.stroke();
-        }
-        for (let c = 0; c < this.cols; c++) {
-            const x = this.offsetX + c * this.cellSize;
-            ctx.beginPath();
-            ctx.moveTo(x, this.offsetY - this.cellSize / 2);
-            ctx.lineTo(x, this.offsetY + (this.rows - 1) * this.cellSize + this.cellSize / 2);
-            ctx.stroke();
+            for (let c = 0; c < this.cols; c++) {
+                const x = this.offsetX + c * this.cellSize;
+                const y = this.offsetY + r * this.cellSize;
+                ctx.beginPath();
+                ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
 
         // Balls (non-dragging first)

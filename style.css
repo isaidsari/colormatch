@@ -5,7 +5,7 @@
 }
 
 body {
-        background: #0a0a0a;
+        background: #141414;
         color: #e0e0e0;
         font-family: 'Space Mono', 'Courier New', monospace;
         min-height: 100vh;
@@ -91,9 +91,11 @@ body {
 /* ── Canvas ─────────────────────────────── */
 
 .game-container {
-        border: 2px solid #333;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 6px;
         overflow: hidden;
         line-height: 0;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.4);
 }
 
 #canvas {
