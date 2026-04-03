@@ -71,28 +71,76 @@ function getSprite(color, radius) {
   return oc;
 }
 var PERSONALITIES = [
-  { mouth: "smirk", lookBias: 0 },
-  { mouth: "open", lookBias: 0 },
-  { mouth: "grin", lookBias: 0 },
-  { mouth: "smug", lookBias: 0.5 },
-  { mouth: "flat", lookBias: -0.3 },
-  { mouth: "worried", lookBias: 0 }
+  { mouth: "smirk", lookBias: 0, brow: { angle: 0.15, offsetY: 0, curve: 0.2 } },
+  { mouth: "open", lookBias: 0, brow: { angle: -0.1, offsetY: -0.02, curve: 0.4 } },
+  { mouth: "grin", lookBias: 0, brow: { angle: 0, offsetY: 0, curve: 0.3 } },
+  { mouth: "smug", lookBias: 0.5, brow: { angle: 0.2, offsetY: 0.02, curve: 0.1 } },
+  { mouth: "flat", lookBias: -0.3, brow: { angle: 0, offsetY: 0.03, curve: 0 } },
+  { mouth: "worried", lookBias: 0, brow: { angle: -0.2, offsetY: -0.01, curve: 0.3 } }
 ];
 var _faceTime = 0;
 function updateFaceTime(dt) {
   _faceTime += dt;
 }
-function drawFace(ctx, x, y, r, colorIndex, state) {
+function drawFace(ctx, x, y, r, colorIndex, state, lookAtDx = 0, lookAtDy = 0, lookAtAmt = 0) {
   const t = _faceTime;
   const p = PERSONALITIES[colorIndex] ?? PERSONALITIES[0];
   const span = r * 0.32;
   const eyeY = -r * 0.15;
   const dotR = r * 0.09;
   const blink = Math.sin(t * 1.7 + colorIndex * 1.4) > 0.93;
-  const lx = state === "scared" ? Math.sin(t * 7 + colorIndex) * 3 : (Math.sin(t * 0.7 + colorIndex * 0.8) + p.lookBias) * 1.5;
-  const ly = state === "scared" ? -1 : Math.cos(t * 0.6 + colorIndex) * 0.5;
+  const idleLx = (Math.sin(t * 0.7 + colorIndex * 0.8) + p.lookBias) * 1.5;
+  const idleLy = Math.cos(t * 0.6 + colorIndex) * 0.5;
+  const lookDist = Math.hypot(lookAtDx, lookAtDy) || 1;
+  const targetLx = lookAtDx / lookDist * 3;
+  const targetLy = lookAtDy / lookDist * 1.5;
+  const lx = state === "scared" ? Math.sin(t * 7 + colorIndex) * 3 : idleLx * (1 - lookAtAmt) + targetLx * lookAtAmt;
+  const ly = state === "scared" ? -1 : idleLy * (1 - lookAtAmt) + targetLy * lookAtAmt;
   ctx.save();
   ctx.translate(x, y);
+  const browY = eyeY - r * 0.18;
+  const browW = r * 0.16;
+  ctx.strokeStyle = "#1a1612";
+  ctx.lineWidth = r * 0.04;
+  ctx.lineCap = "round";
+  if (state === "scared") {
+    for (const side of [-1, 1]) {
+      const bx = side * span;
+      ctx.beginPath();
+      ctx.moveTo(bx - side * browW, browY + r * 0.04);
+      ctx.lineTo(bx + side * browW, browY - r * 0.06);
+      ctx.stroke();
+    }
+  } else if (state === "selected") {
+    for (const side of [-1, 1]) {
+      const bx = side * span;
+      ctx.beginPath();
+      ctx.moveTo(bx - browW, browY - r * 0.03);
+      ctx.quadraticCurveTo(bx, browY - r * 0.1, bx + browW, browY - r * 0.03);
+      ctx.stroke();
+    }
+  } else if (!blink) {
+    const b = p.brow;
+    for (const side of [-1, 1]) {
+      const bx = side * span;
+      const bAngle = b.angle * side;
+      const by = browY + b.offsetY * r;
+      ctx.beginPath();
+      if (b.curve > 0.05) {
+        const x1 = bx - browW;
+        const y1 = by + Math.sin(bAngle) * browW;
+        const x2 = bx + browW;
+        const y2 = by - Math.sin(bAngle) * browW;
+        const cpY = by - b.curve * r * 0.15;
+        ctx.moveTo(x1, y1);
+        ctx.quadraticCurveTo(bx, cpY, x2, y2);
+      } else {
+        ctx.moveTo(bx - browW, by + Math.sin(bAngle) * browW);
+        ctx.lineTo(bx + browW, by - Math.sin(bAngle) * browW);
+      }
+      ctx.stroke();
+    }
+  }
   for (const side of [-1, 1]) {
     const ex = side * span;
     if (state === "scared") {
@@ -214,6 +262,9 @@ class Ball {
   col = 0;
   colorIndex = 0;
   faceState = "idle";
+  lookAtX = 0;
+  lookAtY = 0;
+  lookAtAmount = 0;
   vy = 0;
   useGravity = false;
   squashY = 1;
@@ -274,6 +325,11 @@ class Ball {
     } else {
       this.squashY = 1;
     }
+    if (this.lookAtAmount > 0.01) {
+      this.lookAtAmount *= 0.93;
+    } else {
+      this.lookAtAmount = 0;
+    }
     return moving;
   }
   draw(ctx) {
@@ -295,7 +351,7 @@ class Ball {
       ctx.translate(this.x, this.y);
       ctx.scale(sx, sy);
       ctx.translate(-this.x, -this.y);
-      drawFace(ctx, this.x, this.y, this.radius, this.colorIndex, this.faceState);
+      drawFace(ctx, this.x, this.y, this.radius, this.colorIndex, this.faceState, this.lookAtX - this.x, this.lookAtY - this.y, this.lookAtAmount);
       ctx.restore();
     }
   }
@@ -594,7 +650,7 @@ class Game {
       localStorage.setItem("colormatch-hs", String(this.highScore));
     }
     const intensity = Math.min(this.combo, 6);
-    const burstCount = 6 + intensity * 3;
+    const burstCount = 8 + intensity * 4;
     let sumX = 0, sumY = 0;
     for (const b of set) {
       this.spawnBurst(b.x, b.y, b.color, burstCount);
@@ -604,14 +660,24 @@ class Game {
     }
     const cx = sumX / set.size;
     const cy = sumY / set.size;
+    this.shakeMag = Math.min(2 + intensity * 1.5, 12);
     if (this.combo >= 2) {
-      this.shakeMag = Math.min(3 + intensity * 2, 14);
-    }
-    if (this.combo >= 3) {
-      this.flashAlpha = Math.min(0.12 + intensity * 0.04, 0.35);
+      this.flashAlpha = Math.min(0.08 + intensity * 0.03, 0.28);
       const colors = [...set].map((b) => b.color);
       this.flashColor = colors[0];
     }
+    for (let r = 0;r < this.rows; r++)
+      for (let c = 0;c < this.cols; c++) {
+        const nb = this.grid[r][c];
+        if (nb && !set.has(nb) && nb.targetScale > 0.5) {
+          const dist = Math.hypot(nb.x - cx, nb.y - cy);
+          if (dist < this.cellSize * 4) {
+            nb.lookAtX = cx;
+            nb.lookAtY = cy;
+            nb.lookAtAmount = Math.min(1, this.cellSize * 4 / (dist + 1));
+          }
+        }
+      }
     const label = this.combo > 1 ? `+${pts} x${this.combo}` : `+${pts}`;
     const popupScale = this.combo > 1 ? 1 + Math.min(intensity * 0.15, 0.6) : 1;
     this.popups.push(new ScorePopup(cx, cy - 10, label, "#fff", popupScale));
@@ -663,9 +729,9 @@ class Game {
   }
   spawnBurst(x, y, color, n) {
     for (let i = 0;i < n; i++) {
-      const a = Math.PI * 2 * i / n + Math.random() * 0.4;
-      const spd = 2.5 + Math.random() * 3;
-      this.particles.push(new Particle(x, y, Math.cos(a) * spd, Math.sin(a) * spd, 2 + Math.random() * 4, color));
+      const a = Math.PI * 2 * i / n + Math.random() * 0.5;
+      const spd = 3 + Math.random() * 4;
+      this.particles.push(new Particle(x, y, Math.cos(a) * spd, Math.sin(a) * spd, 2.5 + Math.random() * 4, color));
     }
   }
   bindEvents() {

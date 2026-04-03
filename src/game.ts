@@ -230,7 +230,7 @@ export class Game {
 
         // Effects — scale with combo
         const intensity = Math.min(this.combo, 6);
-        const burstCount = 6 + intensity * 3;
+        const burstCount = 8 + intensity * 4;
 
         let sumX = 0, sumY = 0;
         for (const b of set) {
@@ -243,18 +243,30 @@ export class Game {
         const cx = sumX / set.size;
         const cy = sumY / set.size;
 
-        // Screen shake on combo
-        if (this.combo >= 2) {
-            this.shakeMag = Math.min(3 + intensity * 2, 14);
-        }
+        // Screen shake — light on first match, stronger on combos
+        this.shakeMag = Math.min(2 + intensity * 1.5, 12);
 
-        // Flash overlay on big combos
-        if (this.combo >= 3) {
-            this.flashAlpha = Math.min(0.12 + intensity * 0.04, 0.35);
-            // Pick flash color from the matched balls
+        // Flash overlay from combo x2
+        if (this.combo >= 2) {
+            this.flashAlpha = Math.min(0.08 + intensity * 0.03, 0.28);
             const colors = [...set].map(b => b.color);
             this.flashColor = colors[0];
         }
+
+        // Nearby balls look at the explosion
+        for (let r = 0; r < this.rows; r++)
+            for (let c = 0; c < this.cols; c++) {
+                const nb = this.grid[r][c];
+                if (nb && !set.has(nb) && nb.targetScale > 0.5) {
+                    const dist = Math.hypot(nb.x - cx, nb.y - cy);
+                    if (dist < this.cellSize * 4) {
+                        nb.lookAtX = cx;
+                        nb.lookAtY = cy;
+                        // Closer = stronger gaze
+                        nb.lookAtAmount = Math.min(1, (this.cellSize * 4) / (dist + 1));
+                    }
+                }
+            }
 
         const label = this.combo > 1 ? `+${pts} x${this.combo}` : `+${pts}`;
         const popupScale = this.combo > 1 ? 1 + Math.min(intensity * 0.15, 0.6) : 1;
@@ -319,10 +331,10 @@ export class Game {
 
     private spawnBurst(x: number, y: number, color: string, n: number): void {
         for (let i = 0; i < n; i++) {
-            const a = (Math.PI * 2 * i) / n + Math.random() * 0.4;
-            const spd = 2.5 + Math.random() * 3;
+            const a = (Math.PI * 2 * i) / n + Math.random() * 0.5;
+            const spd = 3 + Math.random() * 4;
             this.particles.push(
-                new Particle(x, y, Math.cos(a) * spd, Math.sin(a) * spd, 2 + Math.random() * 4, color),
+                new Particle(x, y, Math.cos(a) * spd, Math.sin(a) * spd, 2.5 + Math.random() * 4, color),
             );
         }
     }

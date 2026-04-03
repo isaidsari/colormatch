@@ -85,19 +85,27 @@ function getSprite(color: string, radius: number): OffscreenCanvas {
 type MouthType = 'smirk' | 'open' | 'grin' | 'smug' | 'flat' | 'worried';
 type FaceState = 'idle' | 'selected' | 'scared';
 
+// Eyebrow shape: angle (radians) and vertical offset per personality
+interface BrowDef {
+    angle: number;      // tilt in radians (positive = inner-up, angry look)
+    offsetY: number;    // vertical shift from default position
+    curve: number;      // curvature amount (0 = straight, positive = arched)
+}
+
 interface Personality {
     mouth: MouthType;
-    lookBias: number; // subtle gaze offset per character
+    lookBias: number;
+    brow: BrowDef;
 }
 
 // Each color index maps to a personality
 const PERSONALITIES: Personality[] = [
-    { mouth: 'smirk', lookBias: 0 },    // red — confident
-    { mouth: 'open', lookBias: 0 },    // yellow — surprised
-    { mouth: 'grin', lookBias: 0 },    // green — happy
-    { mouth: 'smug', lookBias: 0.5 },  // blue — cool
-    { mouth: 'flat', lookBias: -0.3 }, // violet — bored
-    { mouth: 'worried', lookBias: 0 },    // orange — nervous
+    { mouth: 'smirk',   lookBias: 0,    brow: { angle: 0.15, offsetY: 0, curve: 0.2 } },     // red — confident, slight arch
+    { mouth: 'open',    lookBias: 0,    brow: { angle: -0.1, offsetY: -0.02, curve: 0.4 } },  // yellow — surprised, raised
+    { mouth: 'grin',    lookBias: 0,    brow: { angle: 0, offsetY: 0, curve: 0.3 } },         // green — happy, relaxed arch
+    { mouth: 'smug',    lookBias: 0.5,  brow: { angle: 0.2, offsetY: 0.02, curve: 0.1 } },   // blue — cool, one brow up
+    { mouth: 'flat',    lookBias: -0.3, brow: { angle: 0, offsetY: 0.03, curve: 0 } },        // violet — bored, flat low brows
+    { mouth: 'worried', lookBias: 0,    brow: { angle: -0.2, offsetY: -0.01, curve: 0.3 } },  // orange — nervous, inner-up
 ];
 
 // Global animation time — updated each frame by the game loop
@@ -113,6 +121,9 @@ function drawFace(
     r: number,
     colorIndex: number,
     state: FaceState,
+    lookAtDx: number = 0,
+    lookAtDy: number = 0,
+    lookAtAmt: number = 0,
 ): void {
     const t = _faceTime;
     const p = PERSONALITIES[colorIndex] ?? PERSONALITIES[0];
@@ -122,14 +133,79 @@ function drawFace(
     const eyeY = -r * 0.15;
     const dotR = r * 0.09;
     const blink = Math.sin(t * 1.7 + colorIndex * 1.4) > 0.93;
+
+    // Idle gaze
+    const idleLx = (Math.sin(t * 0.7 + colorIndex * 0.8) + p.lookBias) * 1.5;
+    const idleLy = Math.cos(t * 0.6 + colorIndex) * 0.5;
+
+    // LookAt gaze — normalize direction
+    const lookDist = Math.hypot(lookAtDx, lookAtDy) || 1;
+    const targetLx = (lookAtDx / lookDist) * 3;
+    const targetLy = (lookAtDy / lookDist) * 1.5;
+
+    // Blend between idle and lookAt
     const lx = state === 'scared'
         ? Math.sin(t * 7 + colorIndex) * 3
-        : (Math.sin(t * 0.7 + colorIndex * 0.8) + p.lookBias) * 1.5;
-    const ly = state === 'scared' ? -1 : Math.cos(t * 0.6 + colorIndex) * 0.5;
+        : idleLx * (1 - lookAtAmt) + targetLx * lookAtAmt;
+    const ly = state === 'scared'
+        ? -1
+        : idleLy * (1 - lookAtAmt) + targetLy * lookAtAmt;
 
     ctx.save();
     ctx.translate(x, y);
 
+    // ── Eyebrows ──
+    const browY = eyeY - r * 0.18;
+    const browW = r * 0.16;
+    ctx.strokeStyle = '#1a1612';
+    ctx.lineWidth = r * 0.04;
+    ctx.lineCap = 'round';
+
+    if (state === 'scared') {
+        // Scared: inner-up worried brows
+        for (const side of [-1, 1]) {
+            const bx = side * span;
+            ctx.beginPath();
+            ctx.moveTo(bx - side * browW, browY + r * 0.04);
+            ctx.lineTo(bx + side * browW, browY - r * 0.06);
+            ctx.stroke();
+        }
+    } else if (state === 'selected') {
+        // Selected: raised happy brows
+        for (const side of [-1, 1]) {
+            const bx = side * span;
+            ctx.beginPath();
+            ctx.moveTo(bx - browW, browY - r * 0.03);
+            ctx.quadraticCurveTo(bx, browY - r * 0.1, bx + browW, browY - r * 0.03);
+            ctx.stroke();
+        }
+    } else if (!blink) {
+        // Personality brows
+        const b = p.brow;
+        for (const side of [-1, 1]) {
+            const bx = side * span;
+            const bAngle = b.angle * side; // mirror angle for each side
+            const by = browY + b.offsetY * r;
+            ctx.beginPath();
+            if (b.curve > 0.05) {
+                // Arched brow
+                const x1 = bx - browW;
+                const y1 = by + Math.sin(bAngle) * browW;
+                const x2 = bx + browW;
+                const y2 = by - Math.sin(bAngle) * browW;
+                const cpY = by - b.curve * r * 0.15;
+                ctx.moveTo(x1, y1);
+                ctx.quadraticCurveTo(bx, cpY, x2, y2);
+            } else {
+                // Straight brow
+                ctx.moveTo(bx - browW, by + Math.sin(bAngle) * browW);
+                ctx.lineTo(bx + browW, by - Math.sin(bAngle) * browW);
+            }
+            ctx.stroke();
+        }
+    }
+
+    // ── Eyes ──
     for (const side of [-1, 1]) {
         const ex = side * span;
 
@@ -268,9 +344,14 @@ export class Ball {
     public colorIndex: number = 0;
     public faceState: FaceState = 'idle';
 
+    // Gaze override — when set, eyes look toward this point
+    public lookAtX: number = 0;
+    public lookAtY: number = 0;
+    public lookAtAmount: number = 0; // 0 = normal idle gaze, 1 = fully locked on
+
     // Physics
     public vy: number = 0;
-    public useGravity: boolean = false;  // only for in-game falls
+    public useGravity: boolean = false;
     private squashY: number = 1;
     private breathPhase: number;
 
@@ -344,6 +425,13 @@ export class Ball {
             this.squashY = 1;
         }
 
+        // --- LookAt decay ---
+        if (this.lookAtAmount > 0.01) {
+            this.lookAtAmount *= 0.93;
+        } else {
+            this.lookAtAmount = 0;
+        }
+
         return moving;
     }
 
@@ -376,7 +464,8 @@ export class Ball {
             ctx.translate(this.x, this.y);
             ctx.scale(sx, sy);
             ctx.translate(-this.x, -this.y);
-            drawFace(ctx, this.x, this.y, this.radius, this.colorIndex, this.faceState);
+            drawFace(ctx, this.x, this.y, this.radius, this.colorIndex, this.faceState,
+                this.lookAtX - this.x, this.lookAtY - this.y, this.lookAtAmount);
             ctx.restore();
         }
     }
