@@ -6,12 +6,21 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
         <title>Color Match</title>
         <link rel="icon" href="./img/icon/icon128.png">
+        <link rel="apple-touch-icon" href="./img/icon/icon128.png">
         <link rel="manifest" href="./manifest.json">
+        <meta name="theme-color" content="#141414">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="./style.css">
         <script type="module" src="./dist/script.js" defer></script>
+        <script>
+                if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.register('./sw.js');
+                }
+        </script>
 </head>
 
 <body>
@@ -23,7 +32,6 @@
                         </div>
                         <div class="header-item title">
                                 <span class="game-title">COLOR MATCH</span>
-                                <span class="combo" id="combo"></span>
                         </div>
                         <div class="header-item">
                                 <span class="header-label">BEST</span>

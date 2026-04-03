@@ -268,6 +268,12 @@ export class Ball {
     public colorIndex: number = 0;
     public faceState: FaceState = 'idle';
 
+    // Physics
+    public vy: number = 0;
+    public useGravity: boolean = false;  // only for in-game falls
+    private squashY: number = 1;
+    private breathPhase: number;
+
     constructor(
         public x: number,
         public y: number,
@@ -276,28 +282,66 @@ export class Ball {
     ) {
         this.targetX = x;
         this.targetY = y;
+        this.breathPhase = Math.random() * Math.PI * 2;
     }
 
     update(speed: number = 0.3): boolean {
         let moving = false;
 
-        const dx = this.targetX - this.x;
+        // --- Vertical movement ---
         const dy = this.targetY - this.y;
-        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-            this.x += dx * speed;
+
+        if (this.useGravity && dy > 1) {
+            // In-game fall — gravity
+            this.vy += 0.55;
+            this.vy = Math.min(this.vy, 14);
+            this.y += this.vy;
+
+            if (this.y >= this.targetY) {
+                const impactV = this.vy;
+                this.y = this.targetY;
+                this.vy = 0;
+                this.useGravity = false;
+                if (impactV > 4) {
+                    this.squashY = 1 - Math.min(0.04, impactV * 0.003);
+                }
+            }
+            moving = true;
+        } else if (Math.abs(dy) > 0.5) {
+            // Lerp (entrance, swap, small moves)
             this.y += dy * speed;
+            if (Math.abs(this.targetY - this.y) <= 0.5) this.y = this.targetY;
+            this.vy = 0;
+            moving = true;
+        } else {
+            this.y = this.targetY;
+            this.vy = 0;
+        }
+
+        // --- Horizontal movement (lerp, used for swap) ---
+        const dx = this.targetX - this.x;
+        if (Math.abs(dx) > 0.5) {
+            this.x += dx * speed;
             moving = true;
         } else {
             this.x = this.targetX;
-            this.y = this.targetY;
         }
 
+        // --- Scale ---
         const ds = this.targetScale - this.scale;
         if (Math.abs(ds) > 0.01) {
             this.scale += ds * 0.35;
             moving = true;
         } else {
             this.scale = this.targetScale;
+        }
+
+        // --- Squash decay (fast settle, no oscillation) ---
+        if (Math.abs(1 - this.squashY) > 0.002) {
+            this.squashY += (1 - this.squashY) * 0.25;
+            moving = true;
+        } else {
+            this.squashY = 1;
         }
 
         return moving;
@@ -308,19 +352,29 @@ export class Ball {
 
         const s = this.scale;
 
+        // Breathing: very subtle idle pulse
+        const breath = this.faceState === 'idle' && this.targetScale === 1
+            ? Math.sin(_faceTime * 2 + this.breathPhase) * 0.004
+            : 0;
+
+        const sy = s * this.squashY * (1 - breath);
+        const sx = s * (2 - this.squashY) * (1 + breath); // conserve volume
+
         // 1) Draw cached body sprite
         const sprite = getSprite(this.color, this.radius);
         const sw = sprite.width;
         const sh = sprite.height;
-        const dw = sw * s;
-        const dh = sh * s;
-        ctx.drawImage(sprite, this.x - dw / 2, this.y - dh / 2, dw, dh);
+        const dw = sw * sx;
+        const dh = sh * sy;
+        // Anchor bottom so squash looks grounded
+        const anchorY = this.y + (sh * s - dh) * 0.5;
+        ctx.drawImage(sprite, this.x - dw / 2, anchorY - dh / 2, dw, dh);
 
         // 2) Draw live face on top
         if (s > 0.3) {
             ctx.save();
             ctx.translate(this.x, this.y);
-            ctx.scale(s, s);
+            ctx.scale(sx, sy);
             ctx.translate(-this.x, -this.y);
             drawFace(ctx, this.x, this.y, this.radius, this.colorIndex, this.faceState);
             ctx.restore();

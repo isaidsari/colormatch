@@ -45,6 +45,15 @@ export class Game {
     // Effects
     private particles: Particle[] = [];
     private popups: ScorePopup[] = [];
+    private shakeX = 0;
+    private shakeY = 0;
+    private shakeMag = 0;
+    private flashAlpha = 0;
+    private flashColor = '#fff';
+    private comboDisplayAlpha = 0;
+    private comboDisplayScale = 1;
+    private comboDisplayText = '';
+    private comboDisplayColor = '#fff';
 
     // Score
     private score = 0;
@@ -53,7 +62,6 @@ export class Game {
 
     // UI refs
     private elScore: HTMLElement;
-    private elCombo: HTMLElement;
     private elHigh: HTMLElement;
 
     constructor(
@@ -64,7 +72,6 @@ export class Game {
         this.offsetY = (canvas.height - (this.rows - 1) * this.cellSize) / 2;
 
         this.elScore = document.getElementById('score')!;
-        this.elCombo = document.getElementById('combo')!;
         this.elHigh = document.getElementById('high-score')!;
 
         this.highScore = parseInt(localStorage.getItem('colormatch-hs') || '0');
@@ -221,10 +228,13 @@ export class Game {
 
 
 
-        // Effects
+        // Effects — scale with combo
+        const intensity = Math.min(this.combo, 6);
+        const burstCount = 6 + intensity * 3;
+
         let sumX = 0, sumY = 0;
         for (const b of set) {
-            this.spawnBurst(b.x, b.y, b.color, 6);
+            this.spawnBurst(b.x, b.y, b.color, burstCount);
             b.targetScale = 0;
             sumX += b.x;
             sumY += b.y;
@@ -232,8 +242,32 @@ export class Game {
 
         const cx = sumX / set.size;
         const cy = sumY / set.size;
+
+        // Screen shake on combo
+        if (this.combo >= 2) {
+            this.shakeMag = Math.min(3 + intensity * 2, 14);
+        }
+
+        // Flash overlay on big combos
+        if (this.combo >= 3) {
+            this.flashAlpha = Math.min(0.12 + intensity * 0.04, 0.35);
+            // Pick flash color from the matched balls
+            const colors = [...set].map(b => b.color);
+            this.flashColor = colors[0];
+        }
+
         const label = this.combo > 1 ? `+${pts} x${this.combo}` : `+${pts}`;
-        this.popups.push(new ScorePopup(cx, cy - 10, label, '#fff'));
+        const popupScale = this.combo > 1 ? 1 + Math.min(intensity * 0.15, 0.6) : 1;
+        this.popups.push(new ScorePopup(cx, cy - 10, label, '#fff', popupScale));
+
+        // Canvas combo banner
+        if (this.combo >= 2) {
+            const colors = [...set].map(b => b.color);
+            this.comboDisplayText = `COMBO x${this.combo}`;
+            this.comboDisplayAlpha = 1;
+            this.comboDisplayScale = 1.6;
+            this.comboDisplayColor = colors[0];
+        }
 
         this.updateUI();
         this.state = State.BREAK_ANIM;
@@ -255,6 +289,7 @@ export class Game {
                         const p = this.pos(write, c);
                         b.targetX = p.x;
                         b.targetY = p.y;
+                        b.useGravity = true;
                     }
                     write--;
                 }
@@ -272,6 +307,7 @@ export class Game {
                 nb.col = c;
                 nb.scale = 0.6;
                 nb.targetScale = 1;
+                nb.useGravity = true;
                 this.grid[r][c] = nb;
             }
         }
@@ -460,9 +496,23 @@ export class Game {
         const { ctx, canvas } = this;
         const w = canvas.width, h = canvas.height;
 
+        // Update screen shake
+        if (this.shakeMag > 0.3) {
+            this.shakeX = (Math.random() - 0.5) * this.shakeMag * 2;
+            this.shakeY = (Math.random() - 0.5) * this.shakeMag * 2;
+            this.shakeMag *= 0.88;
+        } else {
+            this.shakeX = 0;
+            this.shakeY = 0;
+            this.shakeMag = 0;
+        }
+
+        ctx.save();
+        ctx.translate(this.shakeX, this.shakeY);
+
         // Background
         ctx.fillStyle = '#141414';
-        ctx.fillRect(0, 0, w, h);
+        ctx.fillRect(-10, -10, w + 20, h + 20);
 
         // Subtle grid dots
         ctx.fillStyle = 'rgba(255,255,255,0.06)';
@@ -492,6 +542,48 @@ export class Game {
         // Particles & popups
         for (const p of this.particles) p.draw(ctx);
         for (const p of this.popups) p.draw(ctx);
+
+        // Flash overlay
+        if (this.flashAlpha > 0.005) {
+            ctx.globalAlpha = this.flashAlpha;
+            ctx.fillStyle = this.flashColor;
+            ctx.fillRect(-10, -10, w + 20, h + 20);
+            ctx.globalAlpha = 1;
+            this.flashAlpha *= 0.85;
+        }
+
+        // Combo banner — big centered text on canvas
+        if (this.comboDisplayAlpha > 0.01) {
+            ctx.save();
+            ctx.globalAlpha = this.comboDisplayAlpha;
+            const s = this.comboDisplayScale;
+            const bx = w / 2;
+            const by = 38;
+
+            ctx.translate(bx, by);
+            ctx.scale(s, s);
+
+            ctx.font = 'bold 22px "Space Mono", "Courier New", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Glow
+            ctx.shadowColor = this.comboDisplayColor;
+            ctx.shadowBlur = 16;
+            ctx.fillStyle = this.comboDisplayColor;
+            ctx.fillText(this.comboDisplayText, 0, 0);
+            // Second pass for brighter glow
+            ctx.shadowBlur = 8;
+            ctx.fillText(this.comboDisplayText, 0, 0);
+
+            ctx.restore();
+
+            // Animate: scale settles to 1, alpha fades
+            this.comboDisplayScale += (1 - this.comboDisplayScale) * 0.15;
+            this.comboDisplayAlpha -= 0.012;
+        }
+
+        ctx.restore();
     }
 
     // ── UI ────────────────────────────────────────────
@@ -499,11 +591,5 @@ export class Game {
     private updateUI(): void {
         this.elScore.textContent = String(this.score);
         this.elHigh.textContent = String(this.highScore);
-        if (this.combo > 1) {
-            this.elCombo.textContent = `COMBO x${this.combo}`;
-            this.elCombo.classList.add('visible');
-        } else {
-            this.elCombo.classList.remove('visible');
-        }
     }
 }

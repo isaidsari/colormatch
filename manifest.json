@@ -1,17 +1,25 @@
 {
-        "name": "match three game",
-        "short_name": "match3game",
-        "description": "match (at least) three game",
-        "start_url": "./index.html",
-        "display": "standalone",
-        "background_color": "#282525",
-        "theme_color": "#282525",
-        "icons": [
-                {
-                        "src": "./img/icon/icon128.png",
-                        "sizes": "128x128",
-                        "type": "image/png"
-                }
-        ]
-
+  "name": "Color Match",
+  "short_name": "ColorMatch",
+  "description": "A fun match-three puzzle game with cute ball characters",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#141414",
+  "theme_color": "#141414",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "./img/icon/icon128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./img/icon/icon512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }
