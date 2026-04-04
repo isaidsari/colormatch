@@ -23,15 +23,11 @@ export class Particle {
     }
 
     draw(ctx: CanvasRenderingContext2D): void {
-        ctx.save();
         ctx.globalAlpha = Math.max(0, this.life);
         ctx.fillStyle = this.color;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = this.radius * 2;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fill();
-        ctx.restore();
     }
 }
 
@@ -74,12 +70,6 @@ export class ScorePopup {
         const fontSize = Math.round(14 * this.popScale);
         ctx.font = `bold ${fontSize}px "Space Mono", "Courier New", monospace`;
         ctx.textAlign = 'center';
-
-        // Glow for big combos
-        if (this.popScale > 1.1) {
-            ctx.shadowColor = this.color;
-            ctx.shadowBlur = 8 * this.popScale;
-        }
 
         ctx.fillStyle = this.color;
         ctx.fillText(this.text, 0, 0);

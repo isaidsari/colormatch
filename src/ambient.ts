@@ -5,33 +5,33 @@ interface AmbientBall {
     x: number;
     y: number;
     r: number;
-    // Base direction & speed
     angle: number;
     speed: number;
-    // Sinusoidal wobble perpendicular to movement
     wobbleAmp: number;
     wobbleFreq: number;
     wobblePhase: number;
-    // Alpha pulse
     baseAlpha: number;
     alphaAmp: number;
     alphaFreq: number;
     alphaPhase: number;
-    // Size pulse
     baseR: number;
     rAmp: number;
     rFreq: number;
     rPhase: number;
-
     color: string;
-    t: number; // individual time counter
+    t: number;
 }
+
+let balls: AmbientBall[] = [];
+let ambientCtx: CanvasRenderingContext2D | null = null;
+let lastAmbientTick = 0;
+const AMBIENT_INTERVAL = 1000 / 30; // 30fps
 
 export function initAmbient(canvas: HTMLCanvasElement): void {
     canvas.style.filter = 'blur(45px)';
     canvas.style.transform = 'scale(1.08)';
 
-    const ctx = canvas.getContext('2d')!;
+    ambientCtx = canvas.getContext('2d')!;
 
     function resize() {
         canvas.width = window.innerWidth;
@@ -40,7 +40,7 @@ export function initAmbient(canvas: HTMLCanvasElement): void {
     resize();
     window.addEventListener('resize', resize);
 
-    const balls: AmbientBall[] = Array.from({ length: COUNT }, (_, i) => {
+    balls = Array.from({ length: COUNT }, (_, i) => {
         const baseR = 65 + Math.random() * 85;
         return {
             x: Math.random() * window.innerWidth,
@@ -63,51 +63,43 @@ export function initAmbient(canvas: HTMLCanvasElement): void {
             t: Math.random() * 100,
         };
     });
+}
 
-    function tick() {
-        const w = canvas.width;
-        const h = canvas.height;
-        ctx.clearRect(0, 0, w, h);
+/** Called from the game loop each frame — throttled internally to 30fps */
+export function tickAmbient(now: number): void {
+    if (!ambientCtx || now - lastAmbientTick < AMBIENT_INTERVAL) return;
+    lastAmbientTick = now;
 
-        for (const b of balls) {
-            b.t += 0.016; // ~60fps dt
+    const ctx = ambientCtx;
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
 
-            // Slowly drift direction
-            b.angle += (Math.random() - 0.5) * 0.008;
+    ctx.clearRect(0, 0, w, h);
 
-            // Main movement
-            const vx = Math.cos(b.angle) * b.speed;
-            const vy = Math.sin(b.angle) * b.speed;
+    for (const b of balls) {
+        b.t += 0.033; // ~30fps dt
+        b.angle += (Math.random() - 0.5) * 0.008;
 
-            // Perpendicular wobble
-            const perpX = -Math.sin(b.angle);
-            const perpY =  Math.cos(b.angle);
-            const wobble = Math.sin(b.t * b.wobbleFreq + b.wobblePhase) * b.wobbleAmp * 0.016;
+        const vx = Math.cos(b.angle) * b.speed;
+        const vy = Math.sin(b.angle) * b.speed;
+        const perpX = -Math.sin(b.angle);
+        const perpY =  Math.cos(b.angle);
+        const wobble = Math.sin(b.t * b.wobbleFreq + b.wobblePhase) * b.wobbleAmp * 0.033;
 
-            b.x += vx + perpX * wobble;
-            b.y += vy + perpY * wobble;
+        b.x += vx + perpX * wobble;
+        b.y += vy + perpY * wobble;
 
-            // Wrap
-            if (b.x < -b.r)    b.x = w + b.r;
-            if (b.x > w + b.r)  b.x = -b.r;
-            if (b.y < -b.r)    b.y = h + b.r;
-            if (b.y > h + b.r)  b.y = -b.r;
+        if (b.x < -b.r)    b.x = w + b.r;
+        if (b.x > w + b.r)  b.x = -b.r;
+        if (b.y < -b.r)    b.y = h + b.r;
+        if (b.y > h + b.r)  b.y = -b.r;
 
-            // Pulsing alpha
-            const alpha = b.baseAlpha + Math.sin(b.t * b.alphaFreq + b.alphaPhase) * b.alphaAmp;
+        b.r = b.baseR + Math.sin(b.t * b.rFreq + b.rPhase) * b.rAmp;
 
-            // Pulsing size
-            b.r = b.baseR + Math.sin(b.t * b.rFreq + b.rPhase) * b.rAmp;
-
-            ctx.globalAlpha = Math.max(0, alpha);
-            ctx.fillStyle = b.color;
-            ctx.beginPath();
-            ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        requestAnimationFrame(tick);
+        ctx.globalAlpha = Math.max(0, b.baseAlpha + Math.sin(b.t * b.alphaFreq + b.alphaPhase) * b.alphaAmp);
+        ctx.fillStyle = b.color;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
     }
-
-    tick();
 }

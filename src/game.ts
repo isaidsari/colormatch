@@ -34,6 +34,7 @@ export class Game {
     private offsetY: number;
     private logicalW: number;
     private logicalH: number;
+    private gridDotCache: OffscreenCanvas | null = null;
 
     // State
     private state: State = State.FALL_ANIM;
@@ -78,6 +79,7 @@ export class Game {
         private ctx: CanvasRenderingContext2D,
         logicalW: number = 380,
         logicalH: number = 600,
+        private onTickAmbient?: (now: number) => void,
     ) {
         this.logicalW = logicalW;
         this.logicalH = logicalH;
@@ -88,6 +90,7 @@ export class Game {
         this.elHigh = document.getElementById('high-score')!;
 
         this.highScore = parseInt(localStorage.getItem('colormatch-hs') || '0');
+        this.buildGridDotCache();
 
         this.bindEvents();
         this.init();
@@ -208,6 +211,24 @@ export class Game {
         }
 
         return matches;
+    }
+
+    private buildGridDotCache(): void {
+        const oc = new OffscreenCanvas(this.logicalW, this.logicalH);
+        const ctx = oc.getContext('2d')!;
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                ctx.beginPath();
+                ctx.arc(
+                    this.offsetX + c * this.cellSize,
+                    this.offsetY + r * this.cellSize,
+                    1.5, 0, Math.PI * 2,
+                );
+                ctx.fill();
+            }
+        }
+        this.gridDotCache = oc;
     }
 
     // ── Move detection ─────────────────────────────────
@@ -566,7 +587,9 @@ export class Game {
         return anim;
     }
 
-    private tick = (): void => {
+    private tick = (now: number = 0): void => {
+        this.onTickAmbient?.(now);
+
         // Physics
         this.particles = this.particles.filter(p => p.update());
         this.popups = this.popups.filter(p => p.update());
@@ -632,17 +655,8 @@ export class Game {
         ctx.fillStyle = '#141414';
         ctx.fillRect(-10, -10, w + 20, h + 20);
 
-        // Subtle grid dots
-        ctx.fillStyle = 'rgba(255,255,255,0.06)';
-        for (let r = 0; r < this.rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                const x = this.offsetX + c * this.cellSize;
-                const y = this.offsetY + r * this.cellSize;
-                ctx.beginPath();
-                ctx.arc(x, y, 1.5, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
+        // Subtle grid dots (cached)
+        if (this.gridDotCache) ctx.drawImage(this.gridDotCache, 0, 0);
 
         // Balls (non-dragging first)
         for (let r = 0; r < this.rows; r++)

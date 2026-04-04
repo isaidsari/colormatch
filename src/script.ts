@@ -1,5 +1,5 @@
 import { Game } from './game.js';
-import { initAmbient } from './ambient.js';
+import { initAmbient, tickAmbient } from './ambient.js';
 
 const bgCanvas = document.getElementById('bg-canvas') as HTMLCanvasElement;
 initAmbient(bgCanvas);
@@ -17,6 +17,6 @@ canvas.style.width = `${logicalW}px`;
 canvas.style.height = `${logicalH}px`;
 ctx.scale(dpr, dpr);
 
-const game = new Game(canvas, ctx, logicalW, logicalH);
+const game = new Game(canvas, ctx, logicalW, logicalH, tickAmbient);
 
 document.getElementById('restart')?.addEventListener('click', () => game.restart());
