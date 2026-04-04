@@ -5,24 +5,26 @@
 }
 
 body {
-        background: #141414;
+        background: #0e0e0e;
         color: #e0e0e0;
         font-family: 'Space Mono', 'Courier New', monospace;
-        min-height: 100vh;
+        min-height: 100dvh;
         display: flex;
         justify-content: center;
-        align-items: flex-start;
+        align-items: center;
         overflow: hidden;
         -webkit-tap-highlight-color: transparent;
         user-select: none;
 }
 
 .wrapper {
+        position: relative;
+        z-index: 1;
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 16px 0;
-        gap: 10px;
+        padding: 12px 0;
+        gap: 12px;
         width: 100%;
         max-width: 420px;
 }
@@ -32,21 +34,29 @@ body {
 .header {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: stretch;
         width: 380px;
-        padding: 0 4px;
+        padding: 0;
+        gap: 10px;
 }
 
 .header-item {
         display: flex;
         flex-direction: column;
         align-items: center;
-        min-width: 70px;
+        justify-content: center;
+        min-width: 80px;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
 }
 
 .header-item.title {
         flex: 1;
         position: relative;
+        background: none;
+        border: none;
 }
 
 .header-label {
@@ -54,33 +64,54 @@ body {
         font-weight: 400;
         letter-spacing: 3px;
         text-transform: uppercase;
-        color: #666;
+        color: #555;
+        margin-bottom: 2px;
 }
 
 .header-value {
-        font-size: 24px;
+        font-size: 22px;
         font-weight: 700;
         line-height: 1.1;
         color: #fff;
+        transition: transform 0.15s ease;
+}
+
+.header-value.bump {
+        transform: scale(1.15);
 }
 
 .game-title {
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 700;
-        letter-spacing: 4px;
+        letter-spacing: 5px;
         text-transform: uppercase;
-        color: #fff;
+        color: rgba(255, 255, 255, 0.85);
 }
 
+/* ── Ambient background ──────────────────── */
+
+#bg-canvas {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+}
 
 /* ── Canvas ─────────────────────────────── */
 
 .game-container {
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 6px;
+        position: relative;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 10px;
         overflow: hidden;
         line-height: 0;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+        box-shadow:
+                0 2px 8px rgba(0, 0, 0, 0.3),
+                0 8px 32px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        z-index: 1;
 }
 
 #canvas {
@@ -93,27 +124,30 @@ body {
 /* ── Restart ────────────────────────────── */
 
 .restart-btn {
-        background: transparent;
-        border: 2px solid #333;
-        color: #666;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        color: #555;
         font-family: 'Space Mono', 'Courier New', monospace;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 700;
         letter-spacing: 3px;
         text-transform: uppercase;
-        padding: 10px 28px;
+        padding: 10px 32px;
         cursor: pointer;
-        transition: all 0.1s ease;
+        transition: all 0.15s ease;
 }
 
 .restart-btn:hover {
-        border-color: #fff;
-        color: #fff;
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.15);
+        color: #aaa;
 }
 
 .restart-btn:active {
-        background: #fff;
-        color: #000;
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        transform: scale(0.97);
 }
 
 /* ── Responsive ─────────────────────────── */
@@ -121,15 +155,11 @@ body {
 @media (max-width: 400px) {
         .wrapper {
                 padding: 8px 0;
-                gap: 6px;
+                gap: 8px;
         }
 
         .header {
                 width: calc(100vw - 16px);
-        }
-
-        .game-container {
-                border-width: 2px;
         }
 
         #canvas {
@@ -149,10 +179,14 @@ body {
         }
 
         .game-title {
-                font-size: 14px;
+                font-size: 13px;
         }
 
         .header-value {
-                font-size: 22px;
+                font-size: 20px;
+        }
+
+        .header-item {
+                padding: 6px 10px;
         }
 }

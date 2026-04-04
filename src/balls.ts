@@ -113,6 +113,9 @@ let _faceTime = 0;
 export function updateFaceTime(dt: number): void {
     _faceTime += dt;
 }
+export function getFaceTime(): number {
+    return _faceTime;
+}
 
 function drawFace(
     ctx: CanvasRenderingContext2D,

@@ -82,6 +82,9 @@ var _faceTime = 0;
 function updateFaceTime(dt) {
   _faceTime += dt;
 }
+function getFaceTime() {
+  return _faceTime;
+}
 function drawFace(ctx, x, y, r, colorIndex, state, lookAtDx = 0, lookAtDy = 0, lookAtAmt = 0) {
   const t = _faceTime;
   const p = PERSONALITIES[colorIndex] ?? PERSONALITIES[0];
@@ -489,6 +492,8 @@ class Game {
   ballRadius = 18;
   offsetX;
   offsetY;
+  logicalW;
+  logicalH;
   state = 4 /* FALL_ANIM */;
   dragging = null;
   dragOrigin = null;
@@ -507,16 +512,23 @@ class Game {
   comboDisplayScale = 1;
   comboDisplayText = "";
   comboDisplayColor = "#fff";
+  idleTimer = 0;
+  hintMove = null;
+  HINT_DELAY = 5;
   score = 0;
+  displayScore = 0;
+  displayHigh = 0;
   combo = 0;
   highScore = 0;
   elScore;
   elHigh;
-  constructor(canvas, ctx) {
+  constructor(canvas, ctx, logicalW = 380, logicalH = 600) {
     this.canvas = canvas;
     this.ctx = ctx;
-    this.offsetX = (canvas.width - (this.cols - 1) * this.cellSize) / 2;
-    this.offsetY = (canvas.height - (this.rows - 1) * this.cellSize) / 2;
+    this.logicalW = logicalW;
+    this.logicalH = logicalH;
+    this.offsetX = (logicalW - (this.cols - 1) * this.cellSize) / 2;
+    this.offsetY = (logicalH - (this.rows - 1) * this.cellSize) / 2;
     this.elScore = document.getElementById("score");
     this.elHigh = document.getElementById("high-score");
     this.highScore = parseInt(localStorage.getItem("colormatch-hs") || "0");
@@ -526,10 +538,14 @@ class Game {
   init() {
     cancelAnimationFrame(this.animId);
     this.score = 0;
+    this.displayScore = 0;
+    this.displayHigh = this.highScore;
     this.combo = 0;
     this.particles = [];
     this.popups = [];
     this.state = 4 /* FALL_ANIM */;
+    this.elScore.textContent = "0";
+    this.elHigh.textContent = String(this.highScore);
     this.buildGrid();
     this.purgeInitialMatches();
     this.cascadeEntrance();
@@ -586,7 +602,7 @@ class Game {
     for (let r = 0;r < this.rows; r++) {
       for (let c = 0;c < this.cols; c++) {
         const b = this.grid[r][c];
-        b.y = b.targetY - this.canvas.height - r * 20 - Math.random() * 10;
+        b.y = b.targetY - this.logicalH - r * 20 - Math.random() * 10;
       }
     }
   }
@@ -624,6 +640,52 @@ class Game {
     }
     return matches;
   }
+  swapCreatesMatch(r1, c1, r2, c2) {
+    const g = this.grid;
+    const tmpColor = g[r1][c1].color;
+    const tmpIdx = g[r1][c1].colorIndex;
+    g[r1][c1].color = g[r2][c2].color;
+    g[r1][c1].colorIndex = g[r2][c2].colorIndex;
+    g[r2][c2].color = tmpColor;
+    g[r2][c2].colorIndex = tmpIdx;
+    const hasMatch = this.findMatches().length > 0;
+    g[r2][c2].color = g[r1][c1].color;
+    g[r2][c2].colorIndex = g[r1][c1].colorIndex;
+    g[r1][c1].color = tmpColor;
+    g[r1][c1].colorIndex = tmpIdx;
+    return hasMatch;
+  }
+  findValidMove() {
+    for (let r = 0;r < this.rows; r++) {
+      for (let c = 0;c < this.cols; c++) {
+        if (c + 1 < this.cols && this.swapCreatesMatch(r, c, r, c + 1)) {
+          return [r, c, r, c + 1];
+        }
+        if (r + 1 < this.rows && this.swapCreatesMatch(r, c, r + 1, c)) {
+          return [r, c, r + 1, c];
+        }
+      }
+    }
+    return null;
+  }
+  shuffleGrid() {
+    const colors = [];
+    for (let r = 0;r < this.rows; r++)
+      for (let c = 0;c < this.cols; c++)
+        colors.push({ color: this.grid[r][c].color, idx: this.grid[r][c].colorIndex });
+    for (let i = colors.length - 1;i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [colors[i], colors[j]] = [colors[j], colors[i]];
+    }
+    let k = 0;
+    for (let r = 0;r < this.rows; r++)
+      for (let c = 0;c < this.cols; c++) {
+        this.grid[r][c].color = colors[k].color;
+        this.grid[r][c].colorIndex = colors[k].idx;
+        k++;
+      }
+    this.purgeInitialMatches();
+  }
   processMatches() {
     const matches = this.findMatches();
     if (matches.length === 0) {
@@ -631,7 +693,15 @@ class Game {
       for (let r = 0;r < this.rows; r++)
         for (let c = 0;c < this.cols; c++)
           this.grid[r][c].faceState = "idle";
+      if (!this.findValidMove()) {
+        this.shuffleGrid();
+        if (!this.findValidMove()) {
+          this.shuffleGrid();
+        }
+      }
       this.state = 0 /* IDLE */;
+      this.idleTimer = 0;
+      this.hintMove = null;
       this.updateUI();
       return;
     }
@@ -755,15 +825,15 @@ class Game {
   }
   mouseXY(e) {
     const r = this.canvas.getBoundingClientRect();
-    const sx = this.canvas.width / r.width;
-    const sy = this.canvas.height / r.height;
+    const sx = this.logicalW / r.width;
+    const sy = this.logicalH / r.height;
     return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
   }
   touchXY(e) {
     const t = e.touches[0] || e.changedTouches[0];
     const r = this.canvas.getBoundingClientRect();
-    const sx = this.canvas.width / r.width;
-    const sy = this.canvas.height / r.height;
+    const sx = this.logicalW / r.width;
+    const sy = this.logicalH / r.height;
     return { x: (t.clientX - r.left) * sx, y: (t.clientY - r.top) * sy };
   }
   onDown(p) {
@@ -777,6 +847,8 @@ class Game {
     this.dragOrigin = { x: this.dragging.targetX, y: this.dragging.targetY };
     this.state = 1 /* DRAGGING */;
     this.canvas.style.cursor = "grabbing";
+    this.idleTimer = 0;
+    this.hintMove = null;
   }
   onMove(p) {
     if (this.state !== 1 /* DRAGGING */ || !this.dragging)
@@ -881,13 +953,20 @@ class Game {
         if (!anim)
           this.processMatches();
         break;
+      case 0 /* IDLE */:
+        this.idleTimer += 1 / 60;
+        if (!this.hintMove && this.idleTimer >= this.HINT_DELAY) {
+          this.hintMove = this.findValidMove();
+        }
+        break;
     }
+    this.tickUI();
     this.draw();
     this.animId = requestAnimationFrame(this.tick);
   };
   draw() {
-    const { ctx, canvas } = this;
-    const { width: w, height: h } = canvas;
+    const { ctx } = this;
+    const w = this.logicalW, h = this.logicalH;
     if (this.shakeMag > 0.3) {
       this.shakeX = (Math.random() - 0.5) * this.shakeMag * 2;
       this.shakeY = (Math.random() - 0.5) * this.shakeMag * 2;
@@ -920,6 +999,23 @@ class Game {
     if (this.dragging) {
       this.dragging.drawSelected(ctx);
       this.dragging.draw(ctx);
+    }
+    if (this.hintMove) {
+      const [r1, c1, r2, c2] = this.hintMove;
+      const pulse = 0.3 + Math.sin(getFaceTime() * 3) * 0.15;
+      const b1 = this.grid[r1][c1];
+      const b2 = this.grid[r2][c2];
+      for (const b of [b1, b2]) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, this.ballRadius + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
+        ctx.lineWidth = 2;
+        ctx.shadowColor = "rgba(255, 255, 255, 0.5)";
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.restore();
+      }
     }
     for (const p of this.particles)
       p.draw(ctx);
@@ -955,14 +1051,116 @@ class Game {
     }
     ctx.restore();
   }
-  updateUI() {
-    this.elScore.textContent = String(this.score);
-    this.elHigh.textContent = String(this.highScore);
+  updateUI() {}
+  tickUI() {
+    let changed = false;
+    if (this.displayScore < this.score) {
+      const step = Math.max(1, Math.ceil((this.score - this.displayScore) * 0.15));
+      this.displayScore = Math.min(this.displayScore + step, this.score);
+      this.elScore.textContent = String(this.displayScore);
+      changed = true;
+    }
+    if (this.displayHigh < this.highScore) {
+      const step = Math.max(1, Math.ceil((this.highScore - this.displayHigh) * 0.15));
+      this.displayHigh = Math.min(this.displayHigh + step, this.highScore);
+      this.elHigh.textContent = String(this.displayHigh);
+      changed = true;
+    }
+    if (changed) {
+      this.elScore.classList.add("bump");
+      if (this.displayHigh > parseInt(this.elHigh.textContent || "0")) {
+        this.elHigh.classList.add("bump");
+      }
+    } else {
+      this.elScore.classList.remove("bump");
+      this.elHigh.classList.remove("bump");
+    }
   }
 }
 
+// src/ambient.ts
+var COLORS2 = ["#E74C3C", "#F1C40F", "#2ECC71", "#3498DB", "#9B59B6", "#E67E22"];
+var COUNT = 8;
+function initAmbient(canvas) {
+  canvas.style.filter = "blur(45px)";
+  canvas.style.transform = "scale(1.08)";
+  const ctx = canvas.getContext("2d");
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener("resize", resize);
+  const balls = Array.from({ length: COUNT }, (_, i) => {
+    const baseR = 65 + Math.random() * 85;
+    return {
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      r: baseR,
+      baseR,
+      angle: Math.random() * Math.PI * 2,
+      speed: 0.3 + Math.random() * 0.5,
+      wobbleAmp: 30 + Math.random() * 50,
+      wobbleFreq: 0.3 + Math.random() * 0.4,
+      wobblePhase: Math.random() * Math.PI * 2,
+      baseAlpha: 0.3 + Math.random() * 0.2,
+      alphaAmp: 0.08 + Math.random() * 0.08,
+      alphaFreq: 0.2 + Math.random() * 0.3,
+      alphaPhase: Math.random() * Math.PI * 2,
+      rAmp: baseR * 0.12,
+      rFreq: 0.15 + Math.random() * 0.2,
+      rPhase: Math.random() * Math.PI * 2,
+      color: COLORS2[i % COLORS2.length],
+      t: Math.random() * 100
+    };
+  });
+  function tick() {
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    for (const b of balls) {
+      b.t += 0.016;
+      b.angle += (Math.random() - 0.5) * 0.008;
+      const vx = Math.cos(b.angle) * b.speed;
+      const vy = Math.sin(b.angle) * b.speed;
+      const perpX = -Math.sin(b.angle);
+      const perpY = Math.cos(b.angle);
+      const wobble = Math.sin(b.t * b.wobbleFreq + b.wobblePhase) * b.wobbleAmp * 0.016;
+      b.x += vx + perpX * wobble;
+      b.y += vy + perpY * wobble;
+      if (b.x < -b.r)
+        b.x = w + b.r;
+      if (b.x > w + b.r)
+        b.x = -b.r;
+      if (b.y < -b.r)
+        b.y = h + b.r;
+      if (b.y > h + b.r)
+        b.y = -b.r;
+      const alpha = b.baseAlpha + Math.sin(b.t * b.alphaFreq + b.alphaPhase) * b.alphaAmp;
+      b.r = b.baseR + Math.sin(b.t * b.rFreq + b.rPhase) * b.rAmp;
+      ctx.globalAlpha = Math.max(0, alpha);
+      ctx.fillStyle = b.color;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    requestAnimationFrame(tick);
+  }
+  tick();
+}
+
 // src/script.ts
+var bgCanvas = document.getElementById("bg-canvas");
+initAmbient(bgCanvas);
 var canvas = document.getElementById("canvas");
 var ctx = canvas.getContext("2d");
-var game = new Game(canvas, ctx);
+var dpr = window.devicePixelRatio || 1;
+var logicalW = 380;
+var logicalH = 600;
+canvas.width = logicalW * dpr;
+canvas.height = logicalH * dpr;
+canvas.style.width = `${logicalW}px`;
+canvas.style.height = `${logicalH}px`;
+ctx.scale(dpr, dpr);
+var game = new Game(canvas, ctx, logicalW, logicalH);
 document.getElementById("restart")?.addEventListener("click", () => game.restart());

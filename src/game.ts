@@ -1,4 +1,4 @@
-import { Ball, updateFaceTime } from './balls.js';
+import { Ball, updateFaceTime, getFaceTime } from './balls.js';
 import { Particle, ScorePopup } from './particle.js';
 
 const enum State {
@@ -32,6 +32,8 @@ export class Game {
     private ballRadius = 18;
     private offsetX: number;
     private offsetY: number;
+    private logicalW: number;
+    private logicalH: number;
 
     // State
     private state: State = State.FALL_ANIM;
@@ -55,8 +57,15 @@ export class Game {
     private comboDisplayText = '';
     private comboDisplayColor = '#fff';
 
+    // Hint
+    private idleTimer = 0;
+    private hintMove: [number, number, number, number] | null = null;
+    private readonly HINT_DELAY = 5; // seconds before hint shows
+
     // Score
     private score = 0;
+    private displayScore = 0;
+    private displayHigh = 0;
     private combo = 0;
     private highScore = 0;
 
@@ -67,9 +76,13 @@ export class Game {
     constructor(
         private canvas: HTMLCanvasElement,
         private ctx: CanvasRenderingContext2D,
+        logicalW: number = 380,
+        logicalH: number = 600,
     ) {
-        this.offsetX = (canvas.width - (this.cols - 1) * this.cellSize) / 2;
-        this.offsetY = (canvas.height - (this.rows - 1) * this.cellSize) / 2;
+        this.logicalW = logicalW;
+        this.logicalH = logicalH;
+        this.offsetX = (logicalW - (this.cols - 1) * this.cellSize) / 2;
+        this.offsetY = (logicalH - (this.rows - 1) * this.cellSize) / 2;
 
         this.elScore = document.getElementById('score')!;
         this.elHigh = document.getElementById('high-score')!;
@@ -83,10 +96,14 @@ export class Game {
     private init(): void {
         cancelAnimationFrame(this.animId);
         this.score = 0;
+        this.displayScore = 0;
+        this.displayHigh = this.highScore;
         this.combo = 0;
         this.particles = [];
         this.popups = [];
         this.state = State.FALL_ANIM;
+        this.elScore.textContent = '0';
+        this.elHigh.textContent = String(this.highScore);
 
         this.buildGrid();
         this.purgeInitialMatches();
@@ -150,7 +167,7 @@ export class Game {
         for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
                 const b = this.grid[r][c];
-                b.y = b.targetY - this.canvas.height - r * 20 - Math.random() * 10;
+                b.y = b.targetY - this.logicalH - r * 20 - Math.random() * 10;
             }
         }
     }
@@ -193,6 +210,72 @@ export class Game {
         return matches;
     }
 
+    // ── Move detection ─────────────────────────────────
+
+    /** Check if swapping (r1,c1) with (r2,c2) creates a match */
+    private swapCreatesMatch(r1: number, c1: number, r2: number, c2: number): boolean {
+        const g = this.grid;
+        // Temporarily swap colors
+        const tmpColor = g[r1][c1].color;
+        const tmpIdx = g[r1][c1].colorIndex;
+        g[r1][c1].color = g[r2][c2].color;
+        g[r1][c1].colorIndex = g[r2][c2].colorIndex;
+        g[r2][c2].color = tmpColor;
+        g[r2][c2].colorIndex = tmpIdx;
+
+        const hasMatch = this.findMatches().length > 0;
+
+        // Swap back
+        g[r2][c2].color = g[r1][c1].color;
+        g[r2][c2].colorIndex = g[r1][c1].colorIndex;
+        g[r1][c1].color = tmpColor;
+        g[r1][c1].colorIndex = tmpIdx;
+
+        return hasMatch;
+    }
+
+    /** Find first valid move, returns pair of [r,c] or null */
+    private findValidMove(): [number, number, number, number] | null {
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                // Right neighbor
+                if (c + 1 < this.cols && this.swapCreatesMatch(r, c, r, c + 1)) {
+                    return [r, c, r, c + 1];
+                }
+                // Down neighbor
+                if (r + 1 < this.rows && this.swapCreatesMatch(r, c, r + 1, c)) {
+                    return [r, c, r + 1, c];
+                }
+            }
+        }
+        return null;
+    }
+
+    private shuffleGrid(): void {
+        // Collect all colors, shuffle, redistribute
+        const colors: { color: string; idx: number }[] = [];
+        for (let r = 0; r < this.rows; r++)
+            for (let c = 0; c < this.cols; c++)
+                colors.push({ color: this.grid[r][c].color, idx: this.grid[r][c].colorIndex });
+
+        // Fisher-Yates shuffle
+        for (let i = colors.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [colors[i], colors[j]] = [colors[j], colors[i]];
+        }
+
+        let k = 0;
+        for (let r = 0; r < this.rows; r++)
+            for (let c = 0; c < this.cols; c++) {
+                this.grid[r][c].color = colors[k].color;
+                this.grid[r][c].colorIndex = colors[k].idx;
+                k++;
+            }
+
+        // Remove any accidental matches
+        this.purgeInitialMatches();
+    }
+
     // ── Game logic ────────────────────────────────────
 
     private processMatches(): void {
@@ -204,7 +287,19 @@ export class Game {
             for (let r = 0; r < this.rows; r++)
                 for (let c = 0; c < this.cols; c++)
                     this.grid[r][c].faceState = 'idle';
+
+            // Check if any valid moves remain
+            if (!this.findValidMove()) {
+                this.shuffleGrid();
+                // Re-check after shuffle (extremely rare edge case)
+                if (!this.findValidMove()) {
+                    this.shuffleGrid();
+                }
+            }
+
             this.state = State.IDLE;
+            this.idleTimer = 0;
+            this.hintMove = null;
             this.updateUI();
             return;
         }
@@ -356,16 +451,16 @@ export class Game {
 
     private mouseXY(e: MouseEvent) {
         const r = this.canvas.getBoundingClientRect();
-        const sx = this.canvas.width / r.width;
-        const sy = this.canvas.height / r.height;
+        const sx = this.logicalW / r.width;
+        const sy = this.logicalH / r.height;
         return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
     }
 
     private touchXY(e: TouchEvent) {
         const t = e.touches[0] || e.changedTouches[0];
         const r = this.canvas.getBoundingClientRect();
-        const sx = this.canvas.width / r.width;
-        const sy = this.canvas.height / r.height;
+        const sx = this.logicalW / r.width;
+        const sy = this.logicalH / r.height;
         return { x: (t.clientX - r.left) * sx, y: (t.clientY - r.top) * sy };
     }
 
@@ -378,6 +473,8 @@ export class Game {
         this.dragOrigin = { x: this.dragging.targetX, y: this.dragging.targetY };
         this.state = State.DRAGGING;
         this.canvas.style.cursor = 'grabbing';
+        this.idleTimer = 0;
+        this.hintMove = null;
     }
 
     private onMove(p: { x: number; y: number }): void {
@@ -498,15 +595,24 @@ export class Game {
             case State.FALL_ANIM:
                 if (!anim) this.processMatches();
                 break;
+
+            case State.IDLE:
+                // Hint timer
+                this.idleTimer += 1 / 60;
+                if (!this.hintMove && this.idleTimer >= this.HINT_DELAY) {
+                    this.hintMove = this.findValidMove();
+                }
+                break;
         }
 
+        this.tickUI();
         this.draw();
         this.animId = requestAnimationFrame(this.tick);
     };
 
     private draw(): void {
-        const { ctx, canvas } = this;
-        const w = canvas.width, h = canvas.height;
+        const { ctx } = this;
+        const w = this.logicalW, h = this.logicalH;
 
         // Update screen shake
         if (this.shakeMag > 0.3) {
@@ -549,6 +655,25 @@ export class Game {
         if (this.dragging) {
             this.dragging.drawSelected(ctx);
             this.dragging.draw(ctx);
+        }
+
+        // Hint glow
+        if (this.hintMove) {
+            const [r1, c1, r2, c2] = this.hintMove;
+            const pulse = 0.3 + Math.sin(getFaceTime() * 3) * 0.15;
+            const b1 = this.grid[r1][c1];
+            const b2 = this.grid[r2][c2];
+            for (const b of [b1, b2]) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, this.ballRadius + 4, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+                ctx.shadowBlur = 10;
+                ctx.stroke();
+                ctx.restore();
+            }
         }
 
         // Particles & popups
@@ -601,7 +726,35 @@ export class Game {
     // ── UI ────────────────────────────────────────────
 
     private updateUI(): void {
-        this.elScore.textContent = String(this.score);
-        this.elHigh.textContent = String(this.highScore);
+        // Animate score counting in tick
+    }
+
+    private tickUI(): void {
+        let changed = false;
+
+        if (this.displayScore < this.score) {
+            const step = Math.max(1, Math.ceil((this.score - this.displayScore) * 0.15));
+            this.displayScore = Math.min(this.displayScore + step, this.score);
+            this.elScore.textContent = String(this.displayScore);
+            changed = true;
+        }
+
+        if (this.displayHigh < this.highScore) {
+            const step = Math.max(1, Math.ceil((this.highScore - this.displayHigh) * 0.15));
+            this.displayHigh = Math.min(this.displayHigh + step, this.highScore);
+            this.elHigh.textContent = String(this.displayHigh);
+            changed = true;
+        }
+
+        // Bump animation
+        if (changed) {
+            this.elScore.classList.add('bump');
+            if (this.displayHigh > parseInt(this.elHigh.textContent || '0')) {
+                this.elHigh.classList.add('bump');
+            }
+        } else {
+            this.elScore.classList.remove('bump');
+            this.elHigh.classList.remove('bump');
+        }
     }
 }
