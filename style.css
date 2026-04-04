@@ -86,6 +86,8 @@ body {
         letter-spacing: 5px;
         text-transform: uppercase;
         color: rgba(255, 255, 255, 0.85);
+        text-align: center;
+        width: 100%;
 }
 
 /* ── Ambient background ──────────────────── */

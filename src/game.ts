@@ -582,8 +582,12 @@ export class Game {
     private updateBalls(): boolean {
         let anim = false;
         for (let r = 0; r < this.rows; r++)
-            for (let c = 0; c < this.cols; c++)
-                if (this.grid[r][c]?.update()) anim = true;
+            for (let c = 0; c < this.cols; c++) {
+                const b = this.grid[r][c];
+                if (!b) continue;
+                if (b === this.dragging) { anim = true; continue; } // position controlled by mouse
+                if (b.update()) anim = true;
+            }
         return anim;
     }
 

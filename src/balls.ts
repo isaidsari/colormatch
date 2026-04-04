@@ -131,24 +131,26 @@ function drawFace(
     const t = _faceTime;
     const p = PERSONALITIES[colorIndex] ?? PERSONALITIES[0];
 
-    // ── Eyes ──
-    const span = r * 0.32;
-    const eyeY = -r * 0.15;
-    const dotR = r * 0.09;
+    // Layout — more spread out, lower mouth
+    const span  = r * 0.36;   // eyes further apart
+    const eyeY  = -r * 0.1;   // eyes slightly higher center
+    const eyeR  = r * 0.13;   // white of eye
+    const pupilR = r * 0.075; // pupil
+    const my    = r * 0.38;   // mouth lower
+    const browY = eyeY - eyeR - r * 0.1; // brow just above eye
+    const browW = r * 0.19;
+    const browLW = r * 0.045; // brow line width
+
     const blink = Math.sin(t * 1.7 + colorIndex * 1.4) > 0.93;
 
-    // Idle gaze
-    const idleLx = (Math.sin(t * 0.7 + colorIndex * 0.8) + p.lookBias) * 1.5;
-    const idleLy = Math.cos(t * 0.6 + colorIndex) * 0.5;
-
-    // LookAt gaze — normalize direction
+    // Gaze
+    const idleLx = (Math.sin(t * 0.7 + colorIndex * 0.8) + p.lookBias) * 1.8;
+    const idleLy = Math.cos(t * 0.6 + colorIndex) * 0.6;
     const lookDist = Math.hypot(lookAtDx, lookAtDy) || 1;
-    const targetLx = (lookAtDx / lookDist) * 3;
-    const targetLy = (lookAtDy / lookDist) * 1.5;
-
-    // Blend between idle and lookAt
+    const targetLx = (lookAtDx / lookDist) * (eyeR - pupilR) * 0.9;
+    const targetLy = (lookAtDy / lookDist) * (eyeR - pupilR) * 0.7;
     const lx = state === 'scared'
-        ? Math.sin(t * 7 + colorIndex) * 3
+        ? Math.sin(t * 7 + colorIndex) * 2.5
         : idleLx * (1 - lookAtAmt) + targetLx * lookAtAmt;
     const ly = state === 'scared'
         ? -1
@@ -158,51 +160,43 @@ function drawFace(
     ctx.translate(x, y);
 
     // ── Eyebrows ──
-    const browY = eyeY - r * 0.18;
-    const browW = r * 0.16;
-    ctx.strokeStyle = '#1a1612';
-    ctx.lineWidth = r * 0.04;
+    ctx.strokeStyle = 'rgba(20,14,10,0.85)';
+    ctx.lineWidth = browLW;
     ctx.lineCap = 'round';
 
     if (state === 'scared') {
-        // Scared: inner-up worried brows
         for (const side of [-1, 1]) {
             const bx = side * span;
             ctx.beginPath();
-            ctx.moveTo(bx - side * browW, browY + r * 0.04);
-            ctx.lineTo(bx + side * browW, browY - r * 0.06);
+            ctx.moveTo(bx - side * browW, browY + r * 0.05);
+            ctx.lineTo(bx + side * browW * 0.5, browY - r * 0.07);
             ctx.stroke();
         }
     } else if (state === 'selected') {
-        // Selected: raised happy brows
         for (const side of [-1, 1]) {
             const bx = side * span;
             ctx.beginPath();
-            ctx.moveTo(bx - browW, browY - r * 0.03);
-            ctx.quadraticCurveTo(bx, browY - r * 0.1, bx + browW, browY - r * 0.03);
+            ctx.moveTo(bx - browW, browY - r * 0.02);
+            ctx.quadraticCurveTo(bx, browY - r * 0.12, bx + browW, browY - r * 0.02);
             ctx.stroke();
         }
     } else if (!blink) {
-        // Personality brows
         const b = p.brow;
         for (const side of [-1, 1]) {
             const bx = side * span;
-            const bAngle = b.angle * side; // mirror angle for each side
+            const bAngle = b.angle * side;
             const by = browY + b.offsetY * r;
+            const x1 = bx - browW;
+            const y1 = by + Math.sin(bAngle) * browW;
+            const x2 = bx + browW;
+            const y2 = by - Math.sin(bAngle) * browW;
             ctx.beginPath();
             if (b.curve > 0.05) {
-                // Arched brow
-                const x1 = bx - browW;
-                const y1 = by + Math.sin(bAngle) * browW;
-                const x2 = bx + browW;
-                const y2 = by - Math.sin(bAngle) * browW;
-                const cpY = by - b.curve * r * 0.15;
                 ctx.moveTo(x1, y1);
-                ctx.quadraticCurveTo(bx, cpY, x2, y2);
+                ctx.quadraticCurveTo(bx, by - b.curve * r * 0.18, x2, y2);
             } else {
-                // Straight brow
-                ctx.moveTo(bx - browW, by + Math.sin(bAngle) * browW);
-                ctx.lineTo(bx + browW, by - Math.sin(bAngle) * browW);
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
             }
             ctx.stroke();
         }
@@ -213,103 +207,122 @@ function drawFace(
         const ex = side * span;
 
         if (state === 'scared') {
-            // Wide white eyes with tiny pupil
+            // Big white sclera
             ctx.fillStyle = '#fff';
             ctx.beginPath();
-            ctx.arc(ex, eyeY, r * 0.17, 0, Math.PI * 2);
+            ctx.arc(ex, eyeY, eyeR * 1.25, 0, Math.PI * 2);
             ctx.fill();
-            ctx.strokeStyle = 'rgba(30,20,15,0.25)';
-            ctx.lineWidth = r * 0.015;
-            ctx.beginPath();
-            ctx.arc(ex, eyeY, r * 0.17, 0, Math.PI * 2);
+            // Outline
+            ctx.strokeStyle = 'rgba(20,14,10,0.15)';
+            ctx.lineWidth = r * 0.012;
             ctx.stroke();
+            // Tiny darting pupil
             ctx.fillStyle = '#1a1612';
             ctx.beginPath();
-            ctx.arc(ex + lx * 0.5, eyeY + ly, r * 0.055, 0, Math.PI * 2);
+            ctx.arc(ex + lx * 0.5, eyeY + ly, pupilR * 0.7, 0, Math.PI * 2);
             ctx.fill();
+            // Specular
             ctx.fillStyle = 'rgba(255,255,255,0.9)';
             ctx.beginPath();
-            ctx.arc(ex + lx * 0.5 - r * 0.02, eyeY + ly - r * 0.025, r * 0.025, 0, Math.PI * 2);
+            ctx.arc(ex + lx * 0.5 - pupilR * 0.35, eyeY + ly - pupilR * 0.4, pupilR * 0.28, 0, Math.PI * 2);
             ctx.fill();
         } else if (blink) {
-            // Blink — short horizontal line
             ctx.beginPath();
-            ctx.moveTo(ex - dotR * 1.2, eyeY);
-            ctx.lineTo(ex + dotR * 1.2, eyeY);
-            ctx.strokeStyle = '#1a1612';
-            ctx.lineWidth = r * 0.04;
+            ctx.moveTo(ex - eyeR * 1.1, eyeY);
+            ctx.lineTo(ex + eyeR * 1.1, eyeY);
+            ctx.strokeStyle = 'rgba(20,14,10,0.85)';
+            ctx.lineWidth = r * 0.045;
             ctx.lineCap = 'round';
             ctx.stroke();
         } else {
-            // Normal — dot eyes with specular
+            // White sclera
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(ex, eyeY, eyeR, 0, Math.PI * 2);
+            ctx.fill();
+            // Subtle outline
+            ctx.strokeStyle = 'rgba(20,14,10,0.1)';
+            ctx.lineWidth = r * 0.01;
+            ctx.stroke();
+            // Pupil (clipped inside sclera)
+            const px = ex + lx * 0.3;
+            const py = eyeY + ly * 0.3;
+            // Clamp pupil inside sclera
+            const pdist = Math.hypot(px - ex, py - eyeY);
+            const maxPD = eyeR - pupilR;
+            const clampedPx = pdist > maxPD ? ex + (px - ex) / pdist * maxPD : px;
+            const clampedPy = pdist > maxPD ? eyeY + (py - eyeY) / pdist * maxPD : py;
             ctx.fillStyle = '#1a1612';
             ctx.beginPath();
-            ctx.arc(ex + lx * 0.3, eyeY + ly * 0.3, dotR, 0, Math.PI * 2);
+            ctx.arc(clampedPx, clampedPy, pupilR, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+            // Specular
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
             ctx.beginPath();
-            ctx.arc(
-                ex + lx * 0.3 - dotR * 0.3,
-                eyeY + ly * 0.3 - dotR * 0.35,
-                dotR * 0.35,
-                0, Math.PI * 2,
-            );
+            ctx.arc(clampedPx - pupilR * 0.35, clampedPy - pupilR * 0.4, pupilR * 0.32, 0, Math.PI * 2);
             ctx.fill();
         }
     }
 
     // ── Mouth ──
-    const my = r * 0.3;
-    ctx.strokeStyle = '#1a1612';
-    ctx.lineWidth = r * 0.04;
+    ctx.strokeStyle = 'rgba(20,14,10,0.85)';
+    ctx.lineWidth = r * 0.045;
     ctx.lineCap = 'round';
 
     if (state === 'scared') {
-        // Small "o" mouth
+        // Open "O" with dark inside
         ctx.beginPath();
-        ctx.arc(0, my + r * 0.06, r * 0.1, 0, Math.PI * 2);
-        ctx.fillStyle = '#1a1612';
+        ctx.ellipse(0, my, r * 0.1, r * 0.085, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(20,14,10,0.75)';
         ctx.fill();
+        ctx.strokeStyle = 'rgba(20,14,10,0.5)';
+        ctx.lineWidth = r * 0.02;
+        ctx.stroke();
     } else if (state === 'selected') {
-        // Happy arc
+        // Big happy grin
         ctx.beginPath();
-        ctx.arc(0, my + r * 0.02, r * 0.17, 0.15, Math.PI - 0.15);
+        ctx.arc(0, my - r * 0.04, r * 0.22, 0.1, Math.PI - 0.1);
         ctx.stroke();
     } else {
-        // Personality mouth
         switch (p.mouth) {
             case 'smirk':
+                // Asymmetric confident smirk
                 ctx.beginPath();
-                ctx.moveTo(-r * 0.13, my);
-                ctx.quadraticCurveTo(r * 0.02, my + r * 0.1, r * 0.16, my - r * 0.02);
+                ctx.moveTo(-r * 0.14, my + r * 0.01);
+                ctx.quadraticCurveTo(0, my + r * 0.12, r * 0.2, my - r * 0.04);
                 ctx.stroke();
                 break;
             case 'open':
+                // Surprised ellipse with dark inside
                 ctx.beginPath();
-                ctx.ellipse(0, my + r * 0.03, r * 0.09, r * 0.07, 0, 0, Math.PI * 2);
-                ctx.fillStyle = '#1a1612';
+                ctx.ellipse(0, my, r * 0.1, r * 0.08, 0, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(20,14,10,0.7)';
                 ctx.fill();
                 break;
             case 'grin':
+                // Wide happy arc
                 ctx.beginPath();
-                ctx.arc(0, my, r * 0.16, 0.2, Math.PI - 0.2);
+                ctx.arc(0, my - r * 0.04, r * 0.2, 0.15, Math.PI - 0.15);
                 ctx.stroke();
                 break;
             case 'smug':
+                // Flat slight upturn on one side
                 ctx.beginPath();
-                ctx.moveTo(-r * 0.06, my + r * 0.01);
-                ctx.lineTo(r * 0.16, my - r * 0.02);
+                ctx.moveTo(-r * 0.08, my + r * 0.02);
+                ctx.quadraticCurveTo(r * 0.05, my + r * 0.01, r * 0.19, my - r * 0.05);
                 ctx.stroke();
                 break;
             case 'flat':
+                // Dead straight line
                 ctx.beginPath();
-                ctx.moveTo(-r * 0.12, my + r * 0.01);
-                ctx.lineTo(r * 0.12, my + r * 0.01);
+                ctx.moveTo(-r * 0.14, my);
+                ctx.lineTo(r * 0.14, my);
                 ctx.stroke();
                 break;
             case 'worried':
+                // Trembling downward arc
                 ctx.beginPath();
-                ctx.arc(0, my + r * 0.16, r * 0.13, Math.PI + 0.35, Math.PI * 2 - 0.35);
+                ctx.arc(0, my + r * 0.18, r * 0.15, Math.PI + 0.4, Math.PI * 2 - 0.4);
                 ctx.stroke();
                 break;
         }
@@ -321,12 +334,12 @@ function drawFace(
         if (dt <= 1) {
             ctx.globalAlpha = (1 - dt) * 0.5;
             ctx.fillStyle = '#aed6f1';
-            const dx = r * 0.52;
-            const dy = -r * 0.1 + dt * r * 0.4;
+            const sdx = r * 0.58;
+            const sdy = -r * 0.1 + dt * r * 0.4;
             ctx.beginPath();
-            ctx.moveTo(dx, dy - r * 0.1);
-            ctx.quadraticCurveTo(dx + r * 0.05, dy + r * 0.02, dx, dy + r * 0.05);
-            ctx.quadraticCurveTo(dx - r * 0.05, dy + r * 0.02, dx, dy - r * 0.1);
+            ctx.moveTo(sdx, sdy - r * 0.1);
+            ctx.quadraticCurveTo(sdx + r * 0.06, sdy + r * 0.02, sdx, sdy + r * 0.06);
+            ctx.quadraticCurveTo(sdx - r * 0.06, sdy + r * 0.02, sdx, sdy - r * 0.1);
             ctx.fill();
             ctx.globalAlpha = 1;
         }
