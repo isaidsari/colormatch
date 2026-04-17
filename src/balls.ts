@@ -2,6 +2,9 @@
 const spriteCache = new Map<string, OffscreenCanvas>();
 const SPRITE_PAD = 6;
 
+export const RAINBOW_COLOR = '#RAINBOW';
+export type PowerType = 'none' | 'stripedH' | 'stripedV' | 'colorBomb';
+
 function hexToRgb(hex: string): [number, number, number] {
     const n = parseInt(hex.slice(1), 16);
     return [n >> 16, (n >> 8) & 0xff, n & 0xff];
@@ -80,9 +83,14 @@ function getSprite(color: string, radius: number): OffscreenCanvas {
     return oc;
 }
 
+/** Populate the sprite cache so the first frame doesn't pay the gradient cost. */
+export function prewarmSprites(colors: string[], radius: number): void {
+    for (const c of colors) getSprite(c, radius);
+}
+
 // ── Face definitions ────────────────────────────────────────────────
 
-type FaceState = 'idle' | 'selected' | 'scared';
+type FaceState = 'idle' | 'selected' | 'scared' | 'landing';
 
 type EyeStyle = 'normal' | 'halfclosed' | 'wide' | 'droopy';
 
@@ -228,29 +236,47 @@ function drawFace(
 
     const blink = Math.sin(t * 1.7 + colorIndex * 1.4) > 0.93;
 
-    // Gaze
-    const maxGaze = dotR * 0.7;
-    const idleLx = (Math.sin(t * 0.7 + colorIndex * 0.8) + p.lookBias) * maxGaze * 0.6;
-    const idleLy = Math.cos(t * 0.6 + colorIndex) * maxGaze * 0.35;
+    // Dot-eyes are tiny, so idle wander stays subtle while cursor tracking gets
+    // much more travel — otherwise the "everyone is watching the cursor" effect
+    // is invisible.
+    const maxIdleGaze = dotR * 0.5;
+    const maxGaze = dotR * 1.3;
+
+    const idleLx = (Math.sin(t * 0.7 + colorIndex * 0.8) + p.lookBias) * maxIdleGaze * 0.6;
+    const idleLy = Math.cos(t * 0.6 + colorIndex) * maxIdleGaze * 0.35;
     const lookDist = Math.hypot(lookAtDx, lookAtDy) || 1;
     const targetLx = (lookAtDx / lookDist) * maxGaze;
     const targetLy = (lookAtDy / lookDist) * maxGaze * 0.7;
-    const lx = state === 'scared'
-        ? Math.sin(t * 8 + colorIndex) * maxGaze * 0.8
-        : idleLx * (1 - lookAtAmt) + targetLx * lookAtAmt;
-    const ly = state === 'scared'
-        ? -maxGaze * 0.4
-        : idleLy * (1 - lookAtAmt) + targetLy * lookAtAmt;
+    const wide = state === 'scared' || state === 'landing';
+
+    let lx: number, ly: number;
+    if (state === 'scared') {
+        lx = Math.sin(t * 8 + colorIndex) * maxGaze * 0.8;
+        ly = -maxGaze * 0.4;
+    } else if (state === 'landing') {
+        lx = lookAtAmt > 0.05 ? targetLx * lookAtAmt : 0;
+        ly = -maxGaze * 0.3;
+    } else {
+        lx = idleLx * (1 - lookAtAmt) + targetLx * lookAtAmt;
+        ly = idleLy * (1 - lookAtAmt) + targetLy * lookAtAmt;
+    }
 
     ctx.save();
     ctx.translate(x, y);
+
+    // Tiny head tilt toward gaze — a hint, not a performance
+    if (lookAtAmt > 0.4 && state !== 'scared' && state !== 'selected') {
+        const tilt = (lookAtDx / lookDist) * 0.045 * Math.min(1, lookAtAmt);
+        ctx.rotate(tilt);
+    }
+
     ctx.strokeStyle = INK;
     ctx.lineWidth = r * 0.048;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
     // ── Eyes ──
-    if (state === 'scared') {
+    if (wide) {
         // Big wide dot eyes
         for (const side of [-1, 1]) {
             const ex = side * span;
@@ -279,9 +305,9 @@ function drawFace(
     }
 
     // ── Mouth ──
-    if (state === 'scared') {
+    if (wide) {
         ctx.beginPath();
-        ctx.ellipse(0, my, r * 0.12, r * 0.1, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, my, r * (state === 'landing' ? 0.09 : 0.12), r * (state === 'landing' ? 0.08 : 0.1), 0, 0, Math.PI * 2);
         ctx.fillStyle = INK;
         ctx.fill();
     } else if (state === 'selected') {
@@ -312,6 +338,187 @@ function drawFace(
     ctx.restore();
 }
 
+// ── Power overlays ──────────────────────────────────────────────────
+
+const RAINBOW_PALETTE = ['#E74C3C', '#F1C40F', '#2ECC71', '#3498DB', '#9B59B6', '#E67E22'];
+
+function drawColorBombBody(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, r: number,
+): void {
+    const t = _faceTime;
+
+    // Soft pulsing halo
+    const halo = ctx.createRadialGradient(x, y, r * 0.4, x, y, r * 1.8);
+    halo.addColorStop(0, `rgba(255,255,255,${0.22 + Math.sin(t * 2) * 0.05})`);
+    halo.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rotating rainbow conic approximation via pie slices
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.clip();
+
+    const segs = RAINBOW_PALETTE.length;
+    const rot = t * 0.9;
+    for (let i = 0; i < segs; i++) {
+        const a0 = rot + (i / segs) * Math.PI * 2;
+        const a1 = rot + ((i + 1) / segs) * Math.PI * 2 + 0.02;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.arc(x, y, r * 1.1, a0, a1);
+        ctx.closePath();
+        ctx.fillStyle = RAINBOW_PALETTE[i];
+        ctx.fill();
+    }
+
+    // Darken edges (spherical shading)
+    const shade = ctx.createRadialGradient(x - r * 0.25, y - r * 0.25, 0, x, y, r);
+    shade.addColorStop(0, 'rgba(255,255,255,0.35)');
+    shade.addColorStop(0.55, 'rgba(255,255,255,0)');
+    shade.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = shade;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Shimmer stars
+    for (let i = 0; i < 3; i++) {
+        const phase = (t * 1.5 + i * 2.1) % 3;
+        if (phase > 1) continue;
+        const ang = i * 2.09 + t * 0.4;
+        const sr = r * (0.35 + i * 0.15);
+        const sx = x + Math.cos(ang) * sr;
+        const sy = y + Math.sin(ang) * sr;
+        const sz = r * 0.09 * (1 - phase);
+        ctx.globalAlpha = 1 - phase;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(sx, sy, sz, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+
+    ctx.restore();
+
+    // Rim highlight
+    ctx.beginPath();
+    ctx.arc(x - r * 0.2, y - r * 0.25, r * 0.4, 0, Math.PI * 2);
+    const hl = ctx.createRadialGradient(x - r * 0.22, y - r * 0.26, 0, x - r * 0.2, y - r * 0.25, r * 0.4);
+    hl.addColorStop(0, 'rgba(255,255,255,0.55)');
+    hl.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hl;
+    ctx.fill();
+}
+
+function drawColorBombFace(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, r: number,
+): void {
+    const t = _faceTime;
+    ctx.save();
+    ctx.translate(x, y);
+
+    // Star eyes
+    const span = r * 0.34;
+    const eyeY = -r * 0.1;
+    for (const side of [-1, 1]) {
+        drawStar(ctx, side * span, eyeY, r * 0.14, r * 0.065, 5, t * 2);
+    }
+
+    // Smug little grin
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = r * 0.055;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(0, r * 0.28, r * 0.2, 0.2, Math.PI - 0.2);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawStar(
+    ctx: CanvasRenderingContext2D,
+    cx: number, cy: number,
+    outer: number, inner: number,
+    points: number,
+    rot: number,
+): void {
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+        const a = rot + (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+        const rr = i % 2 === 0 ? outer : inner;
+        const px = cx + Math.cos(a) * rr;
+        const py = cy + Math.sin(a) * rr;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+}
+
+function drawStripedOverlay(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, r: number,
+    horizontal: boolean,
+): void {
+    const t = _faceTime;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.98, 0, Math.PI * 2);
+    ctx.clip();
+
+    ctx.translate(x, y);
+    if (!horizontal) ctx.rotate(Math.PI / 2);
+
+    const stripeH = r * 0.28;
+    const span = r * 2.2;
+    const period = stripeH * 2;
+    // Pattern repeats every `period`, so modulo by `period` (not stripeH) to avoid
+    // a half-period jump where white stripes swap with gaps.
+    const shift = (t * 12) % period;
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    for (let sy = -span - period + shift; sy <= span; sy += period) {
+        ctx.fillRect(-span, sy, span * 2, stripeH * 0.55);
+    }
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1;
+    for (let sy = -span - period + shift; sy <= span; sy += period) {
+        ctx.beginPath();
+        ctx.moveTo(-span, sy);
+        ctx.lineTo(span, sy);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-span, sy + stripeH * 0.55);
+        ctx.lineTo(span, sy + stripeH * 0.55);
+        ctx.stroke();
+    }
+
+    ctx.restore();
+}
+
+function drawCreationSparkle(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, r: number,
+    age: number,
+): void {
+    const t = 1 - Math.min(1, age / 0.6);
+    if (t <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = t;
+    const rr = r * (1 + (1 - t) * 1.2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 2 * t;
+    ctx.beginPath();
+    ctx.arc(x, y, rr, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+}
+
 // ── Ball class ──────────────────────────────────────────────────────
 
 export class Ball {
@@ -323,6 +530,22 @@ export class Ball {
     public col: number = 0;
     public colorIndex: number = 0;
     public faceState: FaceState = 'idle';
+
+    // Power-up state
+    public power: PowerType = 'none';
+    public powerCreateAge: number = Infinity; // <0.6 triggers birth shimmer
+
+    // Visual offset — springy displacement layered on top of logical position.
+    // Driven by external pokes (lean target, wobble velocity kick) with a spring-damper.
+    public offsetX: number = 0;
+    public offsetY: number = 0;
+    public offsetVx: number = 0;
+    public offsetVy: number = 0;
+    public offsetTargetX: number = 0;
+    public offsetTargetY: number = 0;
+
+    // Landing surprise window (short "oh!" face after hard impact)
+    public landingTimer: number = 0;
 
     // Gaze override — when set, eyes look toward this point
     public lookAtX: number = 0;
@@ -365,6 +588,11 @@ export class Ball {
                 this.useGravity = false;
                 if (impactV > 4) {
                     this.squashY = 1 - Math.min(0.04, impactV * 0.003);
+                }
+                if (impactV > 7) {
+                    this.landingTimer = 0.18;
+                    // Tiny vertical spring bounce
+                    this.offsetVy -= Math.min(2, impactV * 0.15);
                 }
             }
             moving = true;
@@ -412,6 +640,32 @@ export class Ball {
             this.lookAtAmount = 0;
         }
 
+        // Sparkle ages on its own clock and draws unconditionally; must not block the
+        // state machine, or gravity waits 0.6s every time a power-up is created.
+        if (this.powerCreateAge < 0.6) {
+            this.powerCreateAge += 1 / 60;
+        }
+
+        // Landing surprise window
+        if (this.landingTimer > 0) {
+            this.landingTimer -= 1 / 60;
+            if (this.landingTimer <= 0 && this.faceState === 'landing') {
+                this.faceState = 'idle';
+            }
+        }
+
+        // Spring-damped visual offset toward (offsetTarget). External code pokes the
+        // target for "lean" effects or pokes the velocity directly for "wobble" kicks;
+        // the target decays so lean relaxes once the external setter stops refreshing it.
+        this.offsetVx += (this.offsetTargetX - this.offsetX) * 0.18;
+        this.offsetVy += (this.offsetTargetY - this.offsetY) * 0.18;
+        this.offsetVx *= 0.82;
+        this.offsetVy *= 0.82;
+        this.offsetX += this.offsetVx;
+        this.offsetY += this.offsetVy;
+        this.offsetTargetX *= 0.88;
+        this.offsetTargetY *= 0.88;
+
         return moving;
     }
 
@@ -428,25 +682,41 @@ export class Ball {
         const sy = s * this.squashY * (1 - breath);
         const sx = s * (2 - this.squashY) * (1 + breath); // conserve volume
 
-        // 1) Draw cached body sprite
-        const sprite = getSprite(this.color, this.radius);
-        const sw = sprite.width;
-        const sh = sprite.height;
-        const dw = sw * sx;
-        const dh = sh * sy;
-        // Anchor bottom so squash looks grounded
-        const anchorY = this.y + (sh * s - dh) * 0.5;
-        ctx.drawImage(sprite, this.x - dw / 2, anchorY - dh / 2, dw, dh);
+        // Visual position (logical pos + springy offset)
+        const vx = this.x + this.offsetX;
+        const vy = this.y + this.offsetY;
 
-        // 2) Draw live face on top
-        if (s > 0.3) {
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.scale(sx, sy);
-            ctx.translate(-this.x, -this.y);
-            drawFace(ctx, this.x, this.y, this.radius, this.colorIndex, this.faceState,
-                this.lookAtX - this.x, this.lookAtY - this.y, this.lookAtAmount);
-            ctx.restore();
+        // Squash pivots at ball's base so it stays "grounded"
+        const pivotY = vy + this.radius;
+
+        ctx.save();
+        ctx.translate(vx, pivotY);
+        ctx.scale(sx, sy);
+        ctx.translate(-vx, -pivotY);
+
+        if (this.power === 'colorBomb') {
+            drawColorBombBody(ctx, vx, vy, this.radius);
+            if (s > 0.3) drawColorBombFace(ctx, vx, vy, this.radius);
+        } else {
+            const sprite = getSprite(this.color, this.radius);
+            const sw = sprite.width;
+            const sh = sprite.height;
+            ctx.drawImage(sprite, vx - sw / 2, vy - sh / 2);
+
+            if (this.power === 'stripedH' || this.power === 'stripedV') {
+                drawStripedOverlay(ctx, vx, vy, this.radius, this.power === 'stripedH');
+            }
+
+            if (s > 0.3) {
+                drawFace(ctx, vx, vy, this.radius, this.colorIndex, this.faceState,
+                    this.lookAtX - vx, this.lookAtY - vy, this.lookAtAmount);
+            }
+        }
+
+        ctx.restore();
+
+        if (this.powerCreateAge < 0.6) {
+            drawCreationSparkle(ctx, vx, vy, this.radius, this.powerCreateAge);
         }
     }
 

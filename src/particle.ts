@@ -31,6 +31,44 @@ export class Particle {
     }
 }
 
+export class Shockwave {
+    private age = 0;
+    private dur: number;
+
+    constructor(
+        public x: number,
+        public y: number,
+        public maxR: number,
+        public color: string,
+        dur: number = 0.55,
+    ) {
+        this.dur = dur;
+    }
+
+    update(): boolean {
+        this.age += 1 / 60;
+        return this.age < this.dur;
+    }
+
+    draw(ctx: CanvasRenderingContext2D): void {
+        const t = this.age / this.dur;          // 0..1
+        const eased = 1 - Math.pow(1 - t, 3);    // ease-out cubic
+        const r = this.maxR * eased;
+        const alpha = Math.max(0, 1 - t) * 0.75;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 4 * (1 - t * 0.6);
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 12 * (1 - t);
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
 export class ScorePopup {
     private life: number = 1;
     private age: number = 0;
