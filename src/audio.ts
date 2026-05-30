@@ -67,8 +67,10 @@ export function setMusicMuted(m: boolean): void {
     localStorage.setItem('colormatch-music', m ? '1' : '0');
     if (musicBus && ctx) {
         const now = ctx.currentTime;
-        musicBus.gain.cancelScheduledValues(now);
-        musicBus.gain.linearRampToValueAtTime(m ? 0 : 1, now + 0.2);
+        const g = musicBus.gain;
+        g.cancelScheduledValues(now);
+        g.setValueAtTime(g.value, now); // anchor so the ramp has a defined start
+        g.linearRampToValueAtTime(m ? 0 : 1, now + 0.2);
     }
 }
 
@@ -81,8 +83,10 @@ export function setSfxMuted(m: boolean): void {
     localStorage.setItem('colormatch-sfx', m ? '1' : '0');
     if (sfxBus && ctx) {
         const now = ctx.currentTime;
-        sfxBus.gain.cancelScheduledValues(now);
-        sfxBus.gain.linearRampToValueAtTime(m ? 0 : 1, now + 0.1);
+        const g = sfxBus.gain;
+        g.cancelScheduledValues(now);
+        g.setValueAtTime(g.value, now); // anchor so the ramp has a defined start
+        g.linearRampToValueAtTime(m ? 0 : 1, now + 0.1);
     }
 }
 
