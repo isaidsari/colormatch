@@ -1,3 +1,5 @@
+import { isLowPower } from './perf.js';
+
 const COLORS = ['#E74C3C', '#F1C40F', '#2ECC71', '#3498DB', '#9B59B6', '#E67E22'];
 const COUNT = 8;
 
@@ -82,6 +84,7 @@ export function initAmbient(canvas: HTMLCanvasElement): void {
 
 /** Called from the game loop each frame — throttled internally to 30fps */
 export function tickAmbient(now: number): void {
+    if (isLowPower()) return; // bg canvas is hidden in low-power mode
     if (!ambientCtx || now - lastAmbientTick < AMBIENT_INTERVAL) return;
     lastAmbientTick = now;
 

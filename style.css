@@ -127,6 +127,7 @@ body {
 
 .action-row {
         display: flex;
+        flex-wrap: wrap;
         gap: 8px;
         width: 380px;
 }
@@ -147,18 +148,26 @@ body {
 }
 
 .restart-btn {
-        flex: 1;
+        flex: 1 1 100%;
 }
 
 .mute-btn {
-        padding: 10px 14px;
-        min-width: 70px;
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 10px 8px;
+        letter-spacing: 1px;
 }
 
 .mute-btn.muted {
         color: #333;
         border-color: rgba(255, 255, 255, 0.04);
         background: rgba(255, 255, 255, 0.01);
+}
+
+.mute-btn.active {
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.08);
 }
 
 .restart-btn:hover, .mute-btn:hover {

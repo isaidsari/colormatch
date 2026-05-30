@@ -1,6 +1,7 @@
 import { Ball, updateFaceTime, getFaceTime, RAINBOW_COLOR, PowerType, prewarmSprites } from './balls.js';
 import { Particle, ScorePopup, Shockwave } from './particle.js';
 import * as audio from './audio.js';
+import { isLowPower } from './perf.js';
 
 const enum State {
     IDLE,
@@ -686,6 +687,7 @@ export class Game {
     // ── FX ────────────────────────────────────────────
 
     private spawnBurst(x: number, y: number, color: string, n: number): void {
+        if (isLowPower()) n = Math.ceil(n / 2); // fewer particles on weak devices
         for (let i = 0; i < n; i++) {
             const a = (Math.PI * 2 * i) / n + Math.random() * 0.5;
             const spd = 3 + Math.random() * 4;
@@ -999,8 +1001,10 @@ export class Game {
                 ctx.arc(b.x, b.y, this.ballRadius + 4, 0, Math.PI * 2);
                 ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
                 ctx.lineWidth = 2;
-                ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-                ctx.shadowBlur = 10;
+                if (!isLowPower()) {
+                    ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+                    ctx.shadowBlur = 10;
+                }
                 ctx.stroke();
                 ctx.restore();
             }
@@ -1032,11 +1036,13 @@ export class Game {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
-            ctx.shadowColor = this.comboDisplayColor;
-            ctx.shadowBlur = 16;
             ctx.fillStyle = this.comboDisplayColor;
-            ctx.fillText(this.comboDisplayText, 0, 0);
-            ctx.shadowBlur = 8;
+            if (!isLowPower()) {
+                ctx.shadowColor = this.comboDisplayColor;
+                ctx.shadowBlur = 16;
+                ctx.fillText(this.comboDisplayText, 0, 0);
+                ctx.shadowBlur = 8;
+            }
             ctx.fillText(this.comboDisplayText, 0, 0);
 
             ctx.restore();

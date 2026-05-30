@@ -1,6 +1,7 @@
 import { Game } from './game.js';
 import { initAmbient, tickAmbient } from './ambient.js';
 import { initAudio, isMusicMuted, setMusicMuted, isSfxMuted, setSfxMuted } from './audio.js';
+import { isLowPower, setLowPower } from './perf.js';
 
 const bgCanvas = document.getElementById('bg-canvas') as HTMLCanvasElement;
 initAmbient(bgCanvas);
@@ -8,9 +9,11 @@ initAmbient(bgCanvas);
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 
-// Retina / HiDPI support — cap at 2 so high-DPR phones (dpr=3) don't pay
-// for a 1.5x-larger backing store and per-frame gradient fills.
-const dpr = Math.min(window.devicePixelRatio || 1, 2);
+// Retina / HiDPI support. Cap at 2 normally; in low-power mode drop to 1.5 so
+// high-DPR phones render far fewer pixels. (DPR is fixed at load — toggling
+// performance mode changes the live effects immediately but only adjusts the
+// backing-store resolution after a reload.)
+const dpr = Math.min(window.devicePixelRatio || 1, isLowPower() ? 1.5 : 2);
 const logicalW = 380;
 const logicalH = 600;
 canvas.width = logicalW * dpr;
@@ -25,25 +28,31 @@ const game = new Game(canvas, ctx, logicalW, logicalH, tickAmbient);
 
 document.getElementById('restart')?.addEventListener('click', () => game.restart());
 
-// Audio toggles — music (drone) and sound effects are independent
+// Generic toggle button: reflects `isOn()` via a CSS class, flips it on click.
 function wireToggle(
     id: string,
-    label: string,
-    isMuted: () => boolean,
-    setMuted: (m: boolean) => void,
+    isOn: () => boolean,
+    setOn: (v: boolean) => void,
+    cls: 'muted' | 'active',
 ): void {
     const btn = document.getElementById(id) as HTMLButtonElement | null;
     if (!btn) return;
-    const render = () => {
-        btn.textContent = `${label}`;
-        btn.classList.toggle('muted', isMuted());
-    };
+    const render = () => btn.classList.toggle(cls, isOn());
     render();
     btn.addEventListener('click', () => {
-        setMuted(!isMuted());
+        setOn(!isOn());
         render();
     });
 }
 
-wireToggle('music', '♬ music', isMusicMuted, setMusicMuted);
-wireToggle('sfx', '♪ fx', isSfxMuted, setSfxMuted);
+// Audio toggles — music (drone) and sound effects are independent.
+// `.muted` dims the button when the channel is silenced.
+wireToggle('music', isMusicMuted, setMusicMuted, 'muted');
+wireToggle('sfx', isSfxMuted, setSfxMuted, 'muted');
+
+// Performance toggle — `.active` highlights it while low-power mode is on.
+function applyPerf(): void {
+    bgCanvas.style.display = isLowPower() ? 'none' : 'block';
+}
+applyPerf();
+wireToggle('perf', isLowPower, (v) => { setLowPower(v); applyPerf(); }, 'active');

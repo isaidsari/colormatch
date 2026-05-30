@@ -400,6 +400,38 @@ function drawCreationSparkle(ctx, x, y, r, age) {
   ctx.stroke();
   ctx.restore();
 }
+var idleSpriteCache = new Map;
+function drawNeutralFace(ctx, x, y, r, colorIndex) {
+  const p = PERSONALITIES[colorIndex] ?? PERSONALITIES[0];
+  const span = r * 0.34;
+  const eyeY = -r * 0.1;
+  const my = r * 0.36;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = r * 0.048;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const side of [-1, 1]) {
+    drawEye(ctx, side * span, eyeY, r, 0, 0, p.eye);
+  }
+  p.mouth(ctx, r, my);
+  ctx.restore();
+}
+function getIdleSprite(color, colorIndex, radius) {
+  const key = `${color}_${colorIndex}_${radius}`;
+  let cached = idleSpriteCache.get(key);
+  if (cached)
+    return cached;
+  const size = (radius + SPRITE_PAD) * 2;
+  const oc = new OffscreenCanvas(size, size);
+  const ctx = oc.getContext("2d");
+  const c = radius + SPRITE_PAD;
+  ctx.drawImage(getSprite(color, radius), 0, 0);
+  drawNeutralFace(ctx, c, c, radius, colorIndex);
+  idleSpriteCache.set(key, oc);
+  return oc;
+}
 
 class Ball {
   x;
@@ -533,15 +565,20 @@ class Ball {
       if (s > 0.3)
         drawColorBombFace(ctx, vx, vy, this.radius);
     } else {
-      const sprite = getSprite(this.color, this.radius);
-      const sw = sprite.width;
-      const sh = sprite.height;
-      ctx.drawImage(sprite, vx - sw / 2, vy - sh / 2);
-      if (this.power === "stripedH" || this.power === "stripedV") {
-        drawStripedOverlay(ctx, vx, vy, this.radius, this.power === "stripedH");
-      }
-      if (s > 0.3) {
-        drawFace(ctx, vx, vy, this.radius, this.colorIndex, this.faceState, this.lookAtX - vx, this.lookAtY - vy, this.lookAtAmount);
+      const blink = Math.sin(_faceTime * 1.7 + this.colorIndex * 1.4) > 0.93;
+      const useCachedFace = this.power === "none" && this.faceState === "idle" && this.lookAtAmount <= 0.01 && !blink && s > 0.3;
+      if (useCachedFace) {
+        const sprite = getIdleSprite(this.color, this.colorIndex, this.radius);
+        ctx.drawImage(sprite, vx - sprite.width / 2, vy - sprite.height / 2);
+      } else {
+        const sprite = getSprite(this.color, this.radius);
+        ctx.drawImage(sprite, vx - sprite.width / 2, vy - sprite.height / 2);
+        if (this.power === "stripedH" || this.power === "stripedV") {
+          drawStripedOverlay(ctx, vx, vy, this.radius, this.power === "stripedH");
+        }
+        if (s > 0.3) {
+          drawFace(ctx, vx, vy, this.radius, this.colorIndex, this.faceState, this.lookAtX - vx, this.lookAtY - vy, this.lookAtAmount);
+        }
       }
     }
     ctx.restore();
@@ -745,8 +782,10 @@ function setMusicMuted(m) {
   localStorage.setItem("colormatch-music", m ? "1" : "0");
   if (musicBus && ctx) {
     const now = ctx.currentTime;
-    musicBus.gain.cancelScheduledValues(now);
-    musicBus.gain.linearRampToValueAtTime(m ? 0 : 1, now + 0.2);
+    const g = musicBus.gain;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(g.value, now);
+    g.linearRampToValueAtTime(m ? 0 : 1, now + 0.2);
   }
 }
 function isSfxMuted() {
@@ -757,8 +796,10 @@ function setSfxMuted(m) {
   localStorage.setItem("colormatch-sfx", m ? "1" : "0");
   if (sfxBus && ctx) {
     const now = ctx.currentTime;
-    sfxBus.gain.cancelScheduledValues(now);
-    sfxBus.gain.linearRampToValueAtTime(m ? 0 : 1, now + 0.1);
+    const g = sfxBus.gain;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(g.value, now);
+    g.linearRampToValueAtTime(m ? 0 : 1, now + 0.1);
   }
 }
 function playTone(opts) {
@@ -891,6 +932,24 @@ function playUndo() {
   ensureCtx();
   playTone({ freq: freqOf(4), dur: 0.08, type: "sine", gain: 0.06 });
   playTone({ freq: freqOf(-3), dur: 0.1, type: "sine", gain: 0.06, when: 0.04 });
+}
+
+// src/perf.ts
+function autoDetect() {
+  const cores = navigator.hardwareConcurrency || 8;
+  const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  return cores <= 4 || coarse;
+}
+var lowPower = (localStorage.getItem("colormatch-perf") ?? (autoDetect() ? "1" : "0")) === "1";
+var listeners = [];
+function isLowPower() {
+  return lowPower;
+}
+function setLowPower(b) {
+  lowPower = b;
+  localStorage.setItem("colormatch-perf", b ? "1" : "0");
+  for (const f of listeners)
+    f();
 }
 
 // src/game.ts
@@ -1481,6 +1540,8 @@ class Game {
     this.state = 4 /* FALL_ANIM */;
   }
   spawnBurst(x, y, color, n) {
+    if (isLowPower())
+      n = Math.ceil(n / 2);
     for (let i = 0;i < n; i++) {
       const a = Math.PI * 2 * i / n + Math.random() * 0.5;
       const spd = 3 + Math.random() * 4;
@@ -1767,8 +1828,10 @@ class Game {
         ctx2.arc(b.x, b.y, this.ballRadius + 4, 0, Math.PI * 2);
         ctx2.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
         ctx2.lineWidth = 2;
-        ctx2.shadowColor = "rgba(255, 255, 255, 0.5)";
-        ctx2.shadowBlur = 10;
+        if (!isLowPower()) {
+          ctx2.shadowColor = "rgba(255, 255, 255, 0.5)";
+          ctx2.shadowBlur = 10;
+        }
         ctx2.stroke();
         ctx2.restore();
       }
@@ -1797,11 +1860,13 @@ class Game {
       ctx2.font = 'bold 22px "Space Mono", "Courier New", monospace';
       ctx2.textAlign = "center";
       ctx2.textBaseline = "middle";
-      ctx2.shadowColor = this.comboDisplayColor;
-      ctx2.shadowBlur = 16;
       ctx2.fillStyle = this.comboDisplayColor;
-      ctx2.fillText(this.comboDisplayText, 0, 0);
-      ctx2.shadowBlur = 8;
+      if (!isLowPower()) {
+        ctx2.shadowColor = this.comboDisplayColor;
+        ctx2.shadowBlur = 16;
+        ctx2.fillText(this.comboDisplayText, 0, 0);
+        ctx2.shadowBlur = 8;
+      }
       ctx2.fillText(this.comboDisplayText, 0, 0);
       ctx2.restore();
       this.comboDisplayScale += (1 - this.comboDisplayScale) * 0.15;
@@ -1886,6 +1951,8 @@ function initAmbient(canvas) {
   });
 }
 function tickAmbient(now) {
+  if (isLowPower())
+    return;
   if (!ambientCtx || now - lastAmbientTick < AMBIENT_INTERVAL)
     return;
   lastAmbientTick = now;
@@ -1930,7 +1997,7 @@ var bgCanvas = document.getElementById("bg-canvas");
 initAmbient(bgCanvas);
 var canvas = document.getElementById("canvas");
 var ctx2 = canvas.getContext("2d");
-var dpr = Math.min(window.devicePixelRatio || 1, 2);
+var dpr = Math.min(window.devicePixelRatio || 1, isLowPower() ? 1.5 : 2);
 var logicalW = 380;
 var logicalH = 600;
 canvas.width = logicalW * dpr;
@@ -1941,19 +2008,24 @@ ctx2.scale(dpr, dpr);
 initAudio();
 var game = new Game(canvas, ctx2, logicalW, logicalH, tickAmbient);
 document.getElementById("restart")?.addEventListener("click", () => game.restart());
-function wireToggle(id, label, isMuted, setMuted) {
+function wireToggle(id, isOn, setOn, cls) {
   const btn = document.getElementById(id);
   if (!btn)
     return;
-  const render = () => {
-    btn.textContent = `${label}`;
-    btn.classList.toggle("muted", isMuted());
-  };
+  const render = () => btn.classList.toggle(cls, isOn());
   render();
   btn.addEventListener("click", () => {
-    setMuted(!isMuted());
+    setOn(!isOn());
     render();
   });
 }
-wireToggle("music", "♬ music", isMusicMuted, setMusicMuted);
-wireToggle("sfx", "♪ fx", isSfxMuted, setSfxMuted);
+wireToggle("music", isMusicMuted, setMusicMuted, "muted");
+wireToggle("sfx", isSfxMuted, setSfxMuted, "muted");
+function applyPerf() {
+  bgCanvas.style.display = isLowPower() ? "none" : "block";
+}
+applyPerf();
+wireToggle("perf", isLowPower, (v) => {
+  setLowPower(v);
+  applyPerf();
+}, "active");

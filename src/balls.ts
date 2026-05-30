@@ -519,6 +519,50 @@ function drawCreationSparkle(
     ctx.restore();
 }
 
+// ── Idle full-ball sprite cache (body + neutral face) ───────────────
+// Most balls sit idle most of the time. Baking body + a centered neutral
+// face into one sprite turns ~10 path ops per ball per frame into a single
+// drawImage — the dominant per-frame cost on a 96-ball grid.
+const idleSpriteCache = new Map<string, OffscreenCanvas>();
+
+function drawNeutralFace(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, colorIndex: number): void {
+    const p = PERSONALITIES[colorIndex] ?? PERSONALITIES[0];
+    const span = r * 0.34;
+    const eyeY = -r * 0.1;
+    const my = r * 0.36;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = r * 0.048;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (const side of [-1, 1]) {
+        drawEye(ctx, side * span, eyeY, r, 0, 0, p.eye);
+    }
+    p.mouth(ctx, r, my);
+
+    ctx.restore();
+}
+
+function getIdleSprite(color: string, colorIndex: number, radius: number): OffscreenCanvas {
+    const key = `${color}_${colorIndex}_${radius}`;
+    let cached = idleSpriteCache.get(key);
+    if (cached) return cached;
+
+    const size = (radius + SPRITE_PAD) * 2;
+    const oc = new OffscreenCanvas(size, size);
+    const ctx = oc.getContext('2d') as unknown as CanvasRenderingContext2D;
+    const c = radius + SPRITE_PAD;
+
+    ctx.drawImage(getSprite(color, radius), 0, 0);
+    drawNeutralFace(ctx, c, c, radius, colorIndex);
+
+    idleSpriteCache.set(key, oc);
+    return oc;
+}
+
 // ── Ball class ──────────────────────────────────────────────────────
 
 export class Ball {
@@ -698,18 +742,30 @@ export class Ball {
             drawColorBombBody(ctx, vx, vy, this.radius);
             if (s > 0.3) drawColorBombFace(ctx, vx, vy, this.radius);
         } else {
-            const sprite = getSprite(this.color, this.radius);
-            const sw = sprite.width;
-            const sh = sprite.height;
-            ctx.drawImage(sprite, vx - sw / 2, vy - sh / 2);
+            // Fast path: a plain idle ball that isn't blinking or tracking the
+            // cursor can be drawn from a single cached body+face sprite.
+            const blink = Math.sin(_faceTime * 1.7 + this.colorIndex * 1.4) > 0.93;
+            const useCachedFace = this.power === 'none'
+                && this.faceState === 'idle'
+                && this.lookAtAmount <= 0.01
+                && !blink
+                && s > 0.3;
 
-            if (this.power === 'stripedH' || this.power === 'stripedV') {
-                drawStripedOverlay(ctx, vx, vy, this.radius, this.power === 'stripedH');
-            }
+            if (useCachedFace) {
+                const sprite = getIdleSprite(this.color, this.colorIndex, this.radius);
+                ctx.drawImage(sprite, vx - sprite.width / 2, vy - sprite.height / 2);
+            } else {
+                const sprite = getSprite(this.color, this.radius);
+                ctx.drawImage(sprite, vx - sprite.width / 2, vy - sprite.height / 2);
 
-            if (s > 0.3) {
-                drawFace(ctx, vx, vy, this.radius, this.colorIndex, this.faceState,
-                    this.lookAtX - vx, this.lookAtY - vy, this.lookAtAmount);
+                if (this.power === 'stripedH' || this.power === 'stripedV') {
+                    drawStripedOverlay(ctx, vx, vy, this.radius, this.power === 'stripedH');
+                }
+
+                if (s > 0.3) {
+                    drawFace(ctx, vx, vy, this.radius, this.colorIndex, this.faceState,
+                        this.lookAtX - vx, this.lookAtY - vy, this.lookAtAmount);
+                }
             }
         }
 
