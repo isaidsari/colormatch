@@ -8,8 +8,9 @@ initAmbient(bgCanvas);
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 
-// Retina / HiDPI support
-const dpr = window.devicePixelRatio || 1;
+// Retina / HiDPI support — cap at 2 so high-DPR phones (dpr=3) don't pay
+// for a 1.5x-larger backing store and per-frame gradient fills.
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
 const logicalW = 380;
 const logicalH = 600;
 canvas.width = logicalW * dpr;

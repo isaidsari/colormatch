@@ -1,6 +1,11 @@
 const COLORS = ['#E74C3C', '#F1C40F', '#2ECC71', '#3498DB', '#9B59B6', '#E67E22'];
 const COUNT = 8;
 
+// Render into a downscaled buffer; CSS upscales it back to fullscreen.
+// The upscale + radial-gradient blobs produce a soft "blurred" look for
+// free — no expensive CSS filter:blur() pass over the whole viewport.
+const SCALE = 4;
+
 interface AmbientBall {
     x: number;
     y: number;
@@ -18,24 +23,34 @@ interface AmbientBall {
     rAmp: number;
     rFreq: number;
     rPhase: number;
-    color: string;
+    rgb: string; // "r,g,b"
     t: number;
 }
 
 let balls: AmbientBall[] = [];
 let ambientCtx: CanvasRenderingContext2D | null = null;
+let viewW = 0;
+let viewH = 0;
 let lastAmbientTick = 0;
 const AMBIENT_INTERVAL = 1000 / 30; // 30fps
 
+function hexToRgbStr(hex: string): string {
+    const n = parseInt(hex.slice(1), 16);
+    return `${n >> 16},${(n >> 8) & 0xff},${n & 0xff}`;
+}
+
 export function initAmbient(canvas: HTMLCanvasElement): void {
-    canvas.style.filter = 'blur(45px)';
+    // Slight upscale hides the buffer edges; smooth scaling does the blurring.
     canvas.style.transform = 'scale(1.08)';
 
     ambientCtx = canvas.getContext('2d')!;
 
     function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        viewW = window.innerWidth;
+        viewH = window.innerHeight;
+        // Low-res backing store — CSS stretches it to full size.
+        canvas.width = Math.max(1, Math.ceil(viewW / SCALE));
+        canvas.height = Math.max(1, Math.ceil(viewH / SCALE));
     }
     resize();
     window.addEventListener('resize', resize);
@@ -43,8 +58,8 @@ export function initAmbient(canvas: HTMLCanvasElement): void {
     balls = Array.from({ length: COUNT }, (_, i) => {
         const baseR = 65 + Math.random() * 85;
         return {
-            x: Math.random() * window.innerWidth,
-            y: Math.random() * window.innerHeight,
+            x: Math.random() * viewW,
+            y: Math.random() * viewH,
             r: baseR,
             baseR,
             angle: Math.random() * Math.PI * 2,
@@ -59,7 +74,7 @@ export function initAmbient(canvas: HTMLCanvasElement): void {
             rAmp: baseR * 0.12,
             rFreq: 0.15 + Math.random() * 0.2,
             rPhase: Math.random() * Math.PI * 2,
-            color: COLORS[i % COLORS.length],
+            rgb: hexToRgbStr(COLORS[i % COLORS.length]),
             t: Math.random() * 100,
         };
     });
@@ -71,9 +86,11 @@ export function tickAmbient(now: number): void {
     lastAmbientTick = now;
 
     const ctx = ambientCtx;
-    const w = ctx.canvas.width;
-    const h = ctx.canvas.height;
+    const w = viewW;
+    const h = viewH;
 
+    // Draw in full-screen coordinates; transform maps into the small buffer.
+    ctx.setTransform(1 / SCALE, 0, 0, 1 / SCALE, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
     for (const b of balls) {
@@ -96,8 +113,14 @@ export function tickAmbient(now: number): void {
 
         b.r = b.baseR + Math.sin(b.t * b.rFreq + b.rPhase) * b.rAmp;
 
-        ctx.globalAlpha = Math.max(0, b.baseAlpha + Math.sin(b.t * b.alphaFreq + b.alphaPhase) * b.alphaAmp);
-        ctx.fillStyle = b.color;
+        const alpha = Math.max(0, b.baseAlpha + Math.sin(b.t * b.alphaFreq + b.alphaPhase) * b.alphaAmp);
+
+        // Soft radial blob — bakes the "blur" into the fill itself.
+        const grad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+        grad.addColorStop(0, `rgba(${b.rgb},${alpha})`);
+        grad.addColorStop(0.5, `rgba(${b.rgb},${alpha * 0.6})`);
+        grad.addColorStop(1, `rgba(${b.rgb},0)`);
+        ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
         ctx.fill();

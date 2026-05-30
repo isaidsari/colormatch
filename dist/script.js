@@ -1787,8 +1787,7 @@ class Game {
     }
     ctx2.restore();
   }
-  updateUI() {
-  }
+  updateUI() {}
   tickUI() {
     let changed = false;
     if (this.displayScore < this.score) {
@@ -1818,25 +1817,33 @@ class Game {
 // src/ambient.ts
 var COLORS2 = ["#E74C3C", "#F1C40F", "#2ECC71", "#3498DB", "#9B59B6", "#E67E22"];
 var COUNT = 8;
+var SCALE2 = 4;
 var balls = [];
 var ambientCtx = null;
+var viewW = 0;
+var viewH = 0;
 var lastAmbientTick = 0;
 var AMBIENT_INTERVAL = 1000 / 30;
+function hexToRgbStr(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return `${n >> 16},${n >> 8 & 255},${n & 255}`;
+}
 function initAmbient(canvas) {
-  canvas.style.filter = "blur(45px)";
   canvas.style.transform = "scale(1.08)";
   ambientCtx = canvas.getContext("2d");
   function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    viewW = window.innerWidth;
+    viewH = window.innerHeight;
+    canvas.width = Math.max(1, Math.ceil(viewW / SCALE2));
+    canvas.height = Math.max(1, Math.ceil(viewH / SCALE2));
   }
   resize();
   window.addEventListener("resize", resize);
   balls = Array.from({ length: COUNT }, (_, i) => {
     const baseR = 65 + Math.random() * 85;
     return {
-      x: Math.random() * window.innerWidth,
-      y: Math.random() * window.innerHeight,
+      x: Math.random() * viewW,
+      y: Math.random() * viewH,
       r: baseR,
       baseR,
       angle: Math.random() * Math.PI * 2,
@@ -1851,7 +1858,7 @@ function initAmbient(canvas) {
       rAmp: baseR * 0.12,
       rFreq: 0.15 + Math.random() * 0.2,
       rPhase: Math.random() * Math.PI * 2,
-      color: COLORS2[i % COLORS2.length],
+      rgb: hexToRgbStr(COLORS2[i % COLORS2.length]),
       t: Math.random() * 100
     };
   });
@@ -1861,8 +1868,9 @@ function tickAmbient(now) {
     return;
   lastAmbientTick = now;
   const ctx2 = ambientCtx;
-  const w = ctx2.canvas.width;
-  const h = ctx2.canvas.height;
+  const w = viewW;
+  const h = viewH;
+  ctx2.setTransform(1 / SCALE2, 0, 0, 1 / SCALE2, 0, 0);
   ctx2.clearRect(0, 0, w, h);
   for (const b of balls) {
     b.t += 0.033;
@@ -1883,8 +1891,12 @@ function tickAmbient(now) {
     if (b.y > h + b.r)
       b.y = -b.r;
     b.r = b.baseR + Math.sin(b.t * b.rFreq + b.rPhase) * b.rAmp;
-    ctx2.globalAlpha = Math.max(0, b.baseAlpha + Math.sin(b.t * b.alphaFreq + b.alphaPhase) * b.alphaAmp);
-    ctx2.fillStyle = b.color;
+    const alpha = Math.max(0, b.baseAlpha + Math.sin(b.t * b.alphaFreq + b.alphaPhase) * b.alphaAmp);
+    const grad = ctx2.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+    grad.addColorStop(0, `rgba(${b.rgb},${alpha})`);
+    grad.addColorStop(0.5, `rgba(${b.rgb},${alpha * 0.6})`);
+    grad.addColorStop(1, `rgba(${b.rgb},0)`);
+    ctx2.fillStyle = grad;
     ctx2.beginPath();
     ctx2.arc(b.x, b.y, b.r, 0, Math.PI * 2);
     ctx2.fill();
@@ -1896,7 +1908,7 @@ var bgCanvas = document.getElementById("bg-canvas");
 initAmbient(bgCanvas);
 var canvas = document.getElementById("canvas");
 var ctx2 = canvas.getContext("2d");
-var dpr = window.devicePixelRatio || 1;
+var dpr = Math.min(window.devicePixelRatio || 1, 2);
 var logicalW = 380;
 var logicalH = 600;
 canvas.width = logicalW * dpr;
