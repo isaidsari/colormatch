@@ -692,8 +692,12 @@ var SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
 var BASE_FREQ = 261.63;
 var ctx = null;
 var master = null;
+var musicBus = null;
+var sfxBus = null;
 var started = false;
-var muted = localStorage.getItem("colormatch-mute") === "1";
+var legacyMute = localStorage.getItem("colormatch-mute") === "1";
+var musicMuted = (localStorage.getItem("colormatch-music") ?? (legacyMute ? "1" : "0")) === "1";
+var sfxMuted = (localStorage.getItem("colormatch-sfx") ?? (legacyMute ? "1" : "0")) === "1";
 var padOsc1 = null;
 var padOsc2 = null;
 var padGain = null;
@@ -709,8 +713,14 @@ function ensureCtx() {
     return;
   ctx = new Ctx;
   master = ctx.createGain();
-  master.gain.value = muted ? 0 : 0.7;
+  master.gain.value = 0.7;
   master.connect(ctx.destination);
+  musicBus = ctx.createGain();
+  musicBus.gain.value = musicMuted ? 0 : 1;
+  musicBus.connect(master);
+  sfxBus = ctx.createGain();
+  sfxBus.gain.value = sfxMuted ? 0 : 1;
+  sfxBus.connect(master);
 }
 function startOnGesture() {
   if (started)
@@ -727,20 +737,32 @@ function initAudio() {
   window.addEventListener("keydown", handler, { once: true });
   window.addEventListener("touchstart", handler, { once: true, passive: true });
 }
-function isMuted() {
-  return muted;
+function isMusicMuted() {
+  return musicMuted;
 }
-function setMuted(m) {
-  muted = m;
-  localStorage.setItem("colormatch-mute", m ? "1" : "0");
-  if (master && ctx) {
+function setMusicMuted(m) {
+  musicMuted = m;
+  localStorage.setItem("colormatch-music", m ? "1" : "0");
+  if (musicBus && ctx) {
     const now = ctx.currentTime;
-    master.gain.cancelScheduledValues(now);
-    master.gain.linearRampToValueAtTime(m ? 0 : 0.7, now + 0.1);
+    musicBus.gain.cancelScheduledValues(now);
+    musicBus.gain.linearRampToValueAtTime(m ? 0 : 1, now + 0.2);
+  }
+}
+function isSfxMuted() {
+  return sfxMuted;
+}
+function setSfxMuted(m) {
+  sfxMuted = m;
+  localStorage.setItem("colormatch-sfx", m ? "1" : "0");
+  if (sfxBus && ctx) {
+    const now = ctx.currentTime;
+    sfxBus.gain.cancelScheduledValues(now);
+    sfxBus.gain.linearRampToValueAtTime(m ? 0 : 1, now + 0.1);
   }
 }
 function playTone(opts) {
-  if (!ctx || !master || muted)
+  if (!ctx || !sfxBus || sfxMuted)
     return;
   const now = ctx.currentTime + (opts.when ?? 0);
   const dur = opts.dur ?? 0.25;
@@ -756,12 +778,12 @@ function playTone(opts) {
   g.gain.linearRampToValueAtTime(peak, now + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
   osc.connect(g);
-  g.connect(master);
+  g.connect(sfxBus);
   osc.start(now);
   osc.stop(now + dur + 0.02);
 }
 function playNoiseBurst(when, dur, peak, cutoff) {
-  if (!ctx || !master || muted)
+  if (!ctx || !sfxBus || sfxMuted)
     return;
   const length = Math.max(1, Math.floor(ctx.sampleRate * dur));
   const buf = ctx.createBuffer(1, length, ctx.sampleRate);
@@ -780,12 +802,12 @@ function playNoiseBurst(when, dur, peak, cutoff) {
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   src.connect(filter);
   filter.connect(g);
-  g.connect(master);
+  g.connect(sfxBus);
   src.start(t);
   src.stop(t + dur + 0.02);
 }
 function startPad() {
-  if (!ctx || !master || padOsc1)
+  if (!ctx || !musicBus || padOsc1)
     return;
   padGain = ctx.createGain();
   padGain.gain.value = 0.05;
@@ -803,7 +825,7 @@ function startPad() {
   padOsc1.connect(padFilter);
   padOsc2.connect(padFilter);
   padFilter.connect(padGain);
-  padGain.connect(master);
+  padGain.connect(musicBus);
   padOsc1.start();
   padOsc2.start();
 }
@@ -1919,15 +1941,19 @@ ctx2.scale(dpr, dpr);
 initAudio();
 var game = new Game(canvas, ctx2, logicalW, logicalH, tickAmbient);
 document.getElementById("restart")?.addEventListener("click", () => game.restart());
-var muteBtn = document.getElementById("mute");
-if (muteBtn) {
+function wireToggle(id, label, isMuted, setMuted) {
+  const btn = document.getElementById(id);
+  if (!btn)
+    return;
   const render = () => {
-    muteBtn.textContent = isMuted() ? "♪ off" : "♪ on";
-    muteBtn.classList.toggle("muted", isMuted());
+    btn.textContent = `${label}`;
+    btn.classList.toggle("muted", isMuted());
   };
   render();
-  muteBtn.addEventListener("click", () => {
+  btn.addEventListener("click", () => {
     setMuted(!isMuted());
     render();
   });
 }
+wireToggle("music", "♬ music", isMusicMuted, setMusicMuted);
+wireToggle("sfx", "♪ fx", isSfxMuted, setSfxMuted);

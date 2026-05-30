@@ -1,6 +1,6 @@
 import { Game } from './game.js';
 import { initAmbient, tickAmbient } from './ambient.js';
-import { initAudio, isMuted, setMuted } from './audio.js';
+import { initAudio, isMusicMuted, setMusicMuted, isSfxMuted, setSfxMuted } from './audio.js';
 
 const bgCanvas = document.getElementById('bg-canvas') as HTMLCanvasElement;
 initAmbient(bgCanvas);
@@ -25,16 +25,25 @@ const game = new Game(canvas, ctx, logicalW, logicalH, tickAmbient);
 
 document.getElementById('restart')?.addEventListener('click', () => game.restart());
 
-// Mute toggle
-const muteBtn = document.getElementById('mute') as HTMLButtonElement | null;
-if (muteBtn) {
+// Audio toggles — music (drone) and sound effects are independent
+function wireToggle(
+    id: string,
+    label: string,
+    isMuted: () => boolean,
+    setMuted: (m: boolean) => void,
+): void {
+    const btn = document.getElementById(id) as HTMLButtonElement | null;
+    if (!btn) return;
     const render = () => {
-        muteBtn.textContent = isMuted() ? '♪ off' : '♪ on';
-        muteBtn.classList.toggle('muted', isMuted());
+        btn.textContent = `${label}`;
+        btn.classList.toggle('muted', isMuted());
     };
     render();
-    muteBtn.addEventListener('click', () => {
+    btn.addEventListener('click', () => {
         setMuted(!isMuted());
         render();
     });
 }
+
+wireToggle('music', '♬ music', isMusicMuted, setMusicMuted);
+wireToggle('sfx', '♪ fx', isSfxMuted, setSfxMuted);

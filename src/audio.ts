@@ -6,8 +6,14 @@ const BASE_FREQ = 261.63; // C4
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
+let musicBus: GainNode | null = null; // drone / ambient pad
+let sfxBus: GainNode | null = null;   // one-shot effects
 let started = false;
-let muted = localStorage.getItem('colormatch-mute') === '1';
+
+// Migrate the old single mute flag into both buses on first run.
+const legacyMute = localStorage.getItem('colormatch-mute') === '1';
+let musicMuted = (localStorage.getItem('colormatch-music') ?? (legacyMute ? '1' : '0')) === '1';
+let sfxMuted = (localStorage.getItem('colormatch-sfx') ?? (legacyMute ? '1' : '0')) === '1';
 
 // Ambient pad
 let padOsc1: OscillatorNode | null = null;
@@ -25,8 +31,16 @@ function ensureCtx(): void {
     if (!Ctx) return;
     ctx = new Ctx();
     master = ctx.createGain();
-    master.gain.value = muted ? 0 : 0.7;
+    master.gain.value = 0.7;
     master.connect(ctx.destination);
+
+    musicBus = ctx.createGain();
+    musicBus.gain.value = musicMuted ? 0 : 1;
+    musicBus.connect(master);
+
+    sfxBus = ctx.createGain();
+    sfxBus.gain.value = sfxMuted ? 0 : 1;
+    sfxBus.connect(master);
 }
 
 function startOnGesture(): void {
@@ -44,17 +58,31 @@ export function initAudio(): void {
     window.addEventListener('touchstart', handler, { once: true, passive: true });
 }
 
-export function isMuted(): boolean {
-    return muted;
+export function isMusicMuted(): boolean {
+    return musicMuted;
 }
 
-export function setMuted(m: boolean): void {
-    muted = m;
-    localStorage.setItem('colormatch-mute', m ? '1' : '0');
-    if (master && ctx) {
+export function setMusicMuted(m: boolean): void {
+    musicMuted = m;
+    localStorage.setItem('colormatch-music', m ? '1' : '0');
+    if (musicBus && ctx) {
         const now = ctx.currentTime;
-        master.gain.cancelScheduledValues(now);
-        master.gain.linearRampToValueAtTime(m ? 0 : 0.7, now + 0.1);
+        musicBus.gain.cancelScheduledValues(now);
+        musicBus.gain.linearRampToValueAtTime(m ? 0 : 1, now + 0.2);
+    }
+}
+
+export function isSfxMuted(): boolean {
+    return sfxMuted;
+}
+
+export function setSfxMuted(m: boolean): void {
+    sfxMuted = m;
+    localStorage.setItem('colormatch-sfx', m ? '1' : '0');
+    if (sfxBus && ctx) {
+        const now = ctx.currentTime;
+        sfxBus.gain.cancelScheduledValues(now);
+        sfxBus.gain.linearRampToValueAtTime(m ? 0 : 1, now + 0.1);
     }
 }
 
@@ -67,7 +95,7 @@ function playTone(opts: {
     attack?: number;
     detune?: number;
 }): void {
-    if (!ctx || !master || muted) return;
+    if (!ctx || !sfxBus || sfxMuted) return;
     const now = ctx.currentTime + (opts.when ?? 0);
     const dur = opts.dur ?? 0.25;
     const peak = opts.gain ?? 0.18;
@@ -84,14 +112,14 @@ function playTone(opts: {
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
 
     osc.connect(g);
-    g.connect(master);
+    g.connect(sfxBus);
     osc.start(now);
     osc.stop(now + dur + 0.02);
 }
 
 // Subtle low-passed sawtooth "thud" for impact
 function playNoiseBurst(when: number, dur: number, peak: number, cutoff: number): void {
-    if (!ctx || !master || muted) return;
+    if (!ctx || !sfxBus || sfxMuted) return;
     const length = Math.max(1, Math.floor(ctx.sampleRate * dur));
     const buf = ctx.createBuffer(1, length, ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -112,14 +140,14 @@ function playNoiseBurst(when: number, dur: number, peak: number, cutoff: number)
 
     src.connect(filter);
     filter.connect(g);
-    g.connect(master);
+    g.connect(sfxBus);
     src.start(t);
     src.stop(t + dur + 0.02);
 }
 
 // Ambient pad — two detuned triangle waves lowpass-filtered
 function startPad(): void {
-    if (!ctx || !master || padOsc1) return;
+    if (!ctx || !musicBus || padOsc1) return;
 
     padGain = ctx.createGain();
     padGain.gain.value = 0.05;
@@ -141,7 +169,7 @@ function startPad(): void {
     padOsc1.connect(padFilter);
     padOsc2.connect(padFilter);
     padFilter.connect(padGain);
-    padGain.connect(master);
+    padGain.connect(musicBus);
 
     padOsc1.start();
     padOsc2.start();
