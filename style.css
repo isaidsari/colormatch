@@ -157,7 +157,29 @@ body {
         width: 380px;
 }
 
-.restart-btn, .mute-btn, .mode-btn {
+/* ── Settings drawer ────────────────────── */
+
+.settings-panel {
+        display: flex;
+        gap: 8px;
+        width: 380px;
+        animation: panel-in 0.16s ease;
+}
+
+/* Collapsed the drawer is display:none, so it costs no row and no flex gap —
+   and its buttons stay out of the tab order. */
+.settings-panel[hidden] {
+        display: none;
+}
+
+@keyframes panel-in {
+        from {
+                opacity: 0;
+                transform: translateY(-4px);
+        }
+}
+
+.restart-btn, .mute-btn, .mode-btn, .settings-btn {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 8px;
@@ -173,7 +195,34 @@ body {
 }
 
 .restart-btn {
-        flex: 1 1 100%;
+        flex: 1 1 auto;
+}
+
+.settings-btn {
+        position: relative;
+        flex: 0 0 54px;
+        padding: 10px 0;
+        font-size: 15px;
+        letter-spacing: 0;
+}
+
+.settings-btn.active {
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.08);
+}
+
+/* With the drawer shut there is nothing to show that a channel is off, so the
+   gear carries a dot whenever something is muted. */
+.settings-btn.flagged::after {
+        content: '';
+        position: absolute;
+        top: 7px;
+        right: 8px;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #E74C3C;
 }
 
 .mute-btn {
@@ -237,7 +286,7 @@ body {
                 height: calc((100vw - 16px) * 600 / 380);
         }
 
-        .action-row, .mode-row {
+        .action-row, .mode-row, .settings-panel {
                 width: calc(100vw - 16px);
         }
 }

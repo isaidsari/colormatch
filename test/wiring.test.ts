@@ -11,11 +11,17 @@ test.each([
     'canvas',
     'bg-canvas',
     'restart',
+    'settings',
+    'settings-panel',
     'music',
     'sfx',
     'perf',
 ])('index.html defines #%s', (id) => {
     expect(html).toContain(`id="${id}"`);
+});
+
+test('the settings drawer starts closed', () => {
+    expect(html).toContain('id="settings-panel" hidden');
 });
 
 test('index.html defines exactly the three modes the game knows about', () => {

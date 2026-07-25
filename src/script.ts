@@ -45,6 +45,43 @@ for (const btn of modeButtons) {
 }
 renderModes();
 
+// ── Settings drawer ───────────────────────────────────────────────
+// Music, effects and performance are set-and-forget, so they live behind a
+// gear rather than taking a permanent row under the board.
+
+const settingsBtn = document.getElementById('settings') as HTMLButtonElement | null;
+const settingsPanel = document.getElementById('settings-panel') as HTMLElement | null;
+
+function setSettingsOpen(open: boolean): void {
+    if (!settingsBtn || !settingsPanel) return;
+    settingsPanel.hidden = !open;
+    settingsBtn.setAttribute('aria-expanded', String(open));
+    settingsBtn.classList.toggle('active', open);
+}
+
+/** With the drawer shut, a dot on the gear is the only sign a channel is off. */
+function renderSettingsFlag(): void {
+    settingsBtn?.classList.toggle('flagged', isMusicMuted() || isSfxMuted());
+}
+
+// Start from code rather than trusting the markup's `hidden` attribute, so the
+// panel state and aria-expanded can never drift apart.
+setSettingsOpen(false);
+
+settingsBtn?.addEventListener('click', () => setSettingsOpen(!!settingsPanel?.hidden));
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') setSettingsOpen(false);
+});
+
+// Anything else the pointer lands on — including the board — closes the drawer.
+document.addEventListener('pointerdown', e => {
+    if (!settingsPanel || settingsPanel.hidden) return;
+    const target = e.target as Node;
+    if (settingsPanel.contains(target) || settingsBtn?.contains(target)) return;
+    setSettingsOpen(false);
+});
+
 // Generic toggle button: reflects `isOn()` via a CSS class, flips it on click.
 function wireToggle(
     id: string,
@@ -59,10 +96,11 @@ function wireToggle(
     btn.addEventListener('click', () => {
         setOn(!isOn());
         render();
+        renderSettingsFlag();
     });
 }
 
-// Audio toggles — music (drone) and sound effects are independent.
+// Audio toggles — music and sound effects are independent.
 // `.muted` dims the button when the channel is silenced.
 wireToggle('music', isMusicMuted, setMusicMuted, 'muted');
 wireToggle('sfx', isSfxMuted, setSfxMuted, 'muted');
@@ -73,3 +111,5 @@ function applyPerf(): void {
 }
 applyPerf();
 wireToggle('perf', isLowPower, (v) => { setLowPower(v); applyPerf(); }, 'active');
+
+renderSettingsFlag();
