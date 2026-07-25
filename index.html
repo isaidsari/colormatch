@@ -33,6 +33,7 @@
                         </div>
                         <div class="header-item title">
                                 <span class="game-title">COLOR MATCH</span>
+                                <span class="mode-stat" id="mode-stat"></span>
                         </div>
                         <div class="header-item">
                                 <span class="header-label">BEST</span>
@@ -42,6 +43,12 @@
 
                 <div class="game-container">
                         <canvas id="canvas"></canvas>
+                </div>
+
+                <div class="mode-row" role="group" aria-label="Game mode">
+                        <button class="mode-btn" data-mode="zen">zen</button>
+                        <button class="mode-btn" data-mode="moves">25 moves</button>
+                        <button class="mode-btn" data-mode="time">60 sec</button>
                 </div>
 
                 <div class="action-row">

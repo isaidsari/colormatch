@@ -2,8 +2,7 @@
 const spriteCache = new Map<string, OffscreenCanvas>();
 const SPRITE_PAD = 6;
 
-export const RAINBOW_COLOR = '#RAINBOW';
-export type PowerType = 'none' | 'stripedH' | 'stripedV' | 'colorBomb';
+export type PowerType = 'none' | 'stripedH' | 'stripedV' | 'wrapped' | 'colorBomb';
 
 function hexToRgb(hex: string): [number, number, number] {
     const n = parseInt(hex.slice(1), 16);
@@ -196,13 +195,8 @@ function drawEye(
     ctx.arc(ex + lx - dotR * 0.38, ey + ly - dotR * 0.42, dotR * 0.38, 0, Math.PI * 2);
     ctx.fill();
 
-    // Eyelid overlay for half-closed / droopy
+    // Eyelid overlay for half-closed / droopy — a filled arc across the top half
     if (style === 'halfclosed') {
-        ctx.fillStyle = 'inherit'; // filled by body color — use clip trick
-        ctx.beginPath();
-        ctx.rect(ex - dotR * 1.6, ey + ly - dotR * 1.8, dotR * 3.2, dotR * 1.1);
-        ctx.fillStyle = 'rgba(0,0,0,0)'; // transparent — eyelid drawn as arc
-        // Draw eyelid as a filled arc over top half
         ctx.fillStyle = INK;
         ctx.beginPath();
         ctx.ellipse(ex, ey + ly - dotR * 0.3, dotR * 1.5, dotR * 0.7, 0, Math.PI, 0);
@@ -501,6 +495,75 @@ function drawStripedOverlay(
     ctx.restore();
 }
 
+/**
+ * One ribbon lying across the ball. Flat rectangles read as a sticker, so the
+ * band bulges at the centre and narrows toward the silhouette (how a strip
+ * actually projects when wrapped over a sphere) and is shaded across its width
+ * so it has a rounded top rather than a uniform slab.
+ */
+function ribbonBand(ctx: CanvasRenderingContext2D, reach: number, halfW: number): void {
+    const endW = halfW * 0.46;
+    const ctrl = 2 * halfW - endW; // puts the curve's midpoint exactly at halfW
+    ctx.beginPath();
+    ctx.moveTo(-reach, -endW);
+    ctx.quadraticCurveTo(0, -ctrl, reach, -endW);
+    ctx.lineTo(reach, endW);
+    ctx.quadraticCurveTo(0, ctrl, -reach, endW);
+    ctx.closePath();
+}
+
+/** Gift-wrap ribbon — two bands crossing, lit by the same key light as the body. */
+function drawWrappedOverlay(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, r: number,
+): void {
+    const halfW = r * 0.27;
+    const reach = r * 1.4;
+    const sheen = 0.06 * Math.sin(_faceTime * 2.4);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.99, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.translate(x, y);
+
+    // Rounded cross-section: bright along the ribbon's spine, falling off to
+    // near-transparent at its edges so it melts into the body colour.
+    const across = ctx.createLinearGradient(0, -halfW, 0, halfW);
+    across.addColorStop(0, 'rgba(255,255,255,0.10)');
+    across.addColorStop(0.26, `rgba(255,255,255,${0.5 + sheen})`);
+    across.addColorStop(0.5, `rgba(255,255,255,${0.74 + sheen})`);
+    across.addColorStop(0.74, `rgba(255,255,255,${0.46 + sheen})`);
+    across.addColorStop(1, 'rgba(255,255,255,0.08)');
+
+    for (const angle of [Math.PI / 4, -Math.PI / 4]) {
+        ctx.save();
+        ctx.rotate(angle);
+        ribbonBand(ctx, reach, halfW);
+        ctx.fillStyle = across;
+        ctx.fill();
+        // A whisper of a seam so the second band reads as lying over the first.
+        ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // Re-light the whole ball so the ribbon obeys the body's key light instead
+    // of floating above it.
+    const shade = ctx.createRadialGradient(-r * 0.3, -r * 0.34, r * 0.05, 0, 0, r);
+    shade.addColorStop(0, 'rgba(255,255,255,0.20)');
+    shade.addColorStop(0.42, 'rgba(255,255,255,0)');
+    shade.addColorStop(0.78, 'rgba(0,0,0,0.14)');
+    shade.addColorStop(1, 'rgba(0,0,0,0.42)');
+    ctx.fillStyle = shade;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
 function drawCreationSparkle(
     ctx: CanvasRenderingContext2D,
     x: number, y: number, r: number,
@@ -590,6 +653,8 @@ export class Ball {
 
     // Landing surprise window (short "oh!" face after hard impact)
     public landingTimer: number = 0;
+    /** Impact velocity of the frame this ball touched down; consumed by the game loop for audio. */
+    public lastImpact: number = 0;
 
     // Gaze override — when set, eyes look toward this point
     public lookAtX: number = 0;
@@ -632,9 +697,13 @@ export class Ball {
                 this.useGravity = false;
                 if (impactV > 4) {
                     this.squashY = 1 - Math.min(0.04, impactV * 0.003);
+                    this.lastImpact = impactV;
                 }
                 if (impactV > 7) {
                     this.landingTimer = 0.18;
+                    // Only idle balls get the surprised face — never stomp on
+                    // 'scared' (about to pop) or 'selected'.
+                    if (this.faceState === 'idle') this.faceState = 'landing';
                     // Tiny vertical spring bounce
                     this.offsetVy -= Math.min(2, impactV * 0.15);
                 }
@@ -760,6 +829,8 @@ export class Ball {
 
                 if (this.power === 'stripedH' || this.power === 'stripedV') {
                     drawStripedOverlay(ctx, vx, vy, this.radius, this.power === 'stripedH');
+                } else if (this.power === 'wrapped') {
+                    drawWrappedOverlay(ctx, vx, vy, this.radius);
                 }
 
                 if (s > 0.3) {
@@ -790,18 +861,5 @@ export class Ball {
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.restore();
-    }
-
-    clone(): Ball {
-        const b = new Ball(this.x, this.y, this.radius, this.color);
-        b.targetX = this.targetX;
-        b.targetY = this.targetY;
-        b.row = this.row;
-        b.col = this.col;
-        b.scale = this.scale;
-        b.targetScale = this.targetScale;
-        b.colorIndex = this.colorIndex;
-        b.faceState = this.faceState;
-        return b;
     }
 }

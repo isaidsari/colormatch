@@ -1,4 +1,4 @@
-import { Game } from './game.js';
+import { Game, Mode } from './game.js';
 import { initAmbient, tickAmbient } from './ambient.js';
 import { initAudio, isMusicMuted, setMusicMuted, isSfxMuted, setSfxMuted } from './audio.js';
 import { isLowPower, setLowPower } from './perf.js';
@@ -27,6 +27,23 @@ initAudio();
 const game = new Game(canvas, ctx, logicalW, logicalH, tickAmbient);
 
 document.getElementById('restart')?.addEventListener('click', () => game.restart());
+
+// Mode picker — switching restarts the run, so re-picking the active mode is a no-op.
+const modeButtons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('.mode-btn[data-mode]'),
+);
+function renderModes(): void {
+    for (const btn of modeButtons) {
+        btn.classList.toggle('selected', btn.dataset.mode === game.getMode());
+    }
+}
+for (const btn of modeButtons) {
+    btn.addEventListener('click', () => {
+        game.setMode(btn.dataset.mode as Mode);
+        renderModes();
+    });
+}
+renderModes();
 
 // Generic toggle button: reflects `isOn()` via a CSS class, flips it on click.
 function wireToggle(
