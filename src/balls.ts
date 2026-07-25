@@ -454,56 +454,24 @@ function drawStar(
     ctx.fill();
 }
 
-function drawStripedOverlay(
-    ctx: CanvasRenderingContext2D,
-    x: number, y: number, r: number,
-    horizontal: boolean,
-): void {
-    const t = _faceTime;
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.98, 0, Math.PI * 2);
-    ctx.clip();
+// ── Power-up bands ──────────────────────────────────────────────────
+// Striped and wrapped balls are both "a sphere with bands laid over it", so
+// they go through one renderer. Drawing them separately is what made the two
+// look like they came from different games: flat opaque stripes next to a
+// shaded ribbon.
 
-    ctx.translate(x, y);
-    if (!horizontal) ctx.rotate(Math.PI / 2);
-
-    const stripeH = r * 0.28;
-    const span = r * 2.2;
-    const period = stripeH * 2;
-    // Pattern repeats every `period`, so modulo by `period` (not stripeH) to avoid
-    // a half-period jump where white stripes swap with gaps.
-    const shift = (t * 12) % period;
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    for (let sy = -span - period + shift; sy <= span; sy += period) {
-        ctx.fillRect(-span, sy, span * 2, stripeH * 0.55);
-    }
-
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 1;
-    for (let sy = -span - period + shift; sy <= span; sy += period) {
-        ctx.beginPath();
-        ctx.moveTo(-span, sy);
-        ctx.lineTo(span, sy);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-span, sy + stripeH * 0.55);
-        ctx.lineTo(span, sy + stripeH * 0.55);
-        ctx.stroke();
-    }
-
-    ctx.restore();
+interface Band {
+    /** Direction the band runs. */
+    angle: number;
+    /** Perpendicular distance from the ball's centre. */
+    offset: number;
 }
 
-/**
- * One ribbon lying across the ball. Flat rectangles read as a sticker, so the
- * band bulges at the centre and narrows toward the silhouette (how a strip
- * actually projects when wrapped over a sphere) and is shaded across its width
- * so it has a rounded top rather than a uniform slab.
- */
-function ribbonBand(ctx: CanvasRenderingContext2D, reach: number, halfW: number): void {
-    const endW = halfW * 0.46;
-    const ctrl = 2 * halfW - endW; // puts the curve's midpoint exactly at halfW
+/** Bulges at the sphere's centre, tapers toward the silhouette — how a strip
+ *  actually projects when it is wrapped over a ball. */
+function bandPath(ctx: CanvasRenderingContext2D, reach: number, halfW: number): void {
+    const endW = halfW * 0.5;
+    const ctrl = 2 * halfW - endW; // places the curve's midpoint exactly at halfW
     ctx.beginPath();
     ctx.moveTo(-reach, -endW);
     ctx.quadraticCurveTo(0, -ctrl, reach, -endW);
@@ -512,56 +480,91 @@ function ribbonBand(ctx: CanvasRenderingContext2D, reach: number, halfW: number)
     ctx.closePath();
 }
 
-/** Gift-wrap ribbon — two bands crossing, lit by the same key light as the body. */
-function drawWrappedOverlay(
+function drawBands(
     ctx: CanvasRenderingContext2D,
     x: number, y: number, r: number,
+    bands: Band[],
+    halfW: number,
+    sheen: number,
 ): void {
-    const halfW = r * 0.27;
-    const reach = r * 1.4;
-    const sheen = 0.06 * Math.sin(_faceTime * 2.4);
-
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, r * 0.99, 0, Math.PI * 2);
     ctx.clip();
     ctx.translate(x, y);
 
-    // Rounded cross-section: bright along the ribbon's spine, falling off to
-    // near-transparent at its edges so it melts into the body colour.
+    // Built once in band-local space and reused for every band: canvas resolves
+    // gradient coordinates against the transform in force when it is painted,
+    // so each band gets the same spine-to-edge falloff across its own width.
     const across = ctx.createLinearGradient(0, -halfW, 0, halfW);
-    across.addColorStop(0, 'rgba(255,255,255,0.10)');
-    across.addColorStop(0.26, `rgba(255,255,255,${0.5 + sheen})`);
-    across.addColorStop(0.5, `rgba(255,255,255,${0.74 + sheen})`);
-    across.addColorStop(0.74, `rgba(255,255,255,${0.46 + sheen})`);
-    across.addColorStop(1, 'rgba(255,255,255,0.08)');
+    across.addColorStop(0, 'rgba(255,255,255,0.09)');
+    across.addColorStop(0.28, `rgba(255,255,255,${0.46 + sheen})`);
+    across.addColorStop(0.5, `rgba(255,255,255,${0.72 + sheen})`);
+    across.addColorStop(0.72, `rgba(255,255,255,${0.42 + sheen})`);
+    across.addColorStop(1, 'rgba(255,255,255,0.07)');
 
-    for (const angle of [Math.PI / 4, -Math.PI / 4]) {
+    for (const band of bands) {
+        // Half-length of the chord this band cuts across the sphere.
+        const chord = r * r - band.offset * band.offset;
+        if (chord <= 0) continue;
+
         ctx.save();
-        ctx.rotate(angle);
-        ribbonBand(ctx, reach, halfW);
+        ctx.rotate(band.angle);
+        ctx.translate(0, band.offset);
+        bandPath(ctx, Math.sqrt(chord) * 1.2, halfW);
         ctx.fillStyle = across;
         ctx.fill();
-        // A whisper of a seam so the second band reads as lying over the first.
-        ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+        // A whisper of a seam, so crossing bands read as one lying over another.
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
         ctx.lineWidth = 0.8;
         ctx.stroke();
         ctx.restore();
     }
 
-    // Re-light the whole ball so the ribbon obeys the body's key light instead
-    // of floating above it.
+    // Re-light the ball afterwards so the bands sit under the body's key light
+    // rather than floating on top of it.
     const shade = ctx.createRadialGradient(-r * 0.3, -r * 0.34, r * 0.05, 0, 0, r);
-    shade.addColorStop(0, 'rgba(255,255,255,0.20)');
+    shade.addColorStop(0, 'rgba(255,255,255,0.18)');
     shade.addColorStop(0.42, 'rgba(255,255,255,0)');
-    shade.addColorStop(0.78, 'rgba(0,0,0,0.14)');
-    shade.addColorStop(1, 'rgba(0,0,0,0.42)');
+    shade.addColorStop(0.78, 'rgba(0,0,0,0.13)');
+    shade.addColorStop(1, 'rgba(0,0,0,0.4)');
     ctx.fillStyle = shade;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
+}
+
+/** Striped: parallel bands sliding across the ball in the blast direction. */
+function drawStripedOverlay(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, r: number,
+    horizontal: boolean,
+): void {
+    const angle = horizontal ? 0 : Math.PI / 2;
+    const period = r * 0.52;
+    const shift = (_faceTime * 11) % period;
+
+    const bands: Band[] = [];
+    for (let o = -r - period + shift; o < r; o += period) {
+        if (Math.abs(o) < r) bands.push({ angle, offset: o });
+    }
+
+    drawBands(ctx, x, y, r, bands, r * 0.09, 0.04 * Math.sin(_faceTime * 3));
+}
+
+/** Wrapped: two wider bands crossing, like ribbon around a parcel. */
+function drawWrappedOverlay(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, r: number,
+): void {
+    drawBands(
+        ctx, x, y, r,
+        [{ angle: Math.PI / 4, offset: 0 }, { angle: -Math.PI / 4, offset: 0 }],
+        r * 0.23,
+        0.06 * Math.sin(_faceTime * 2.4),
+    );
 }
 
 function drawCreationSparkle(
