@@ -2,7 +2,10 @@
   "name": "colormatch",
   "scripts": {
     "dev": "bun dev.ts",
-    "build": "bun build src/script.ts --outdir dist --target browser"
+    "build": "bun build src/script.ts --outdir dist --target browser --minify",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "check": "bun run typecheck && bun test"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
