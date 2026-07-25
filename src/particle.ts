@@ -31,6 +31,50 @@ export class Particle {
     }
 }
 
+// A board-wide clear puts hundreds of particles on screen, and one fill() each
+// is what makes the refill stutter. Grouping by colour and quantised alpha
+// turns that into a couple of dozen fills with no visible difference.
+const ALPHA_STEPS = 6;
+const batches = new Map<string, Particle[]>();
+
+export function drawParticles(ctx: CanvasRenderingContext2D, list: Particle[]): void {
+    if (list.length === 0) return;
+    if (list.length < 24) {
+        for (const p of list) p.draw(ctx);
+        ctx.globalAlpha = 1;
+        return;
+    }
+
+    for (const bucket of batches.values()) bucket.length = 0;
+
+    for (const p of list) {
+        const step = Math.round(Math.max(0, Math.min(1, p.life)) * ALPHA_STEPS);
+        if (step === 0) continue;
+        const key = `${p.color}|${step}`;
+        let bucket = batches.get(key);
+        if (!bucket) {
+            bucket = [];
+            batches.set(key, bucket);
+        }
+        bucket.push(p);
+    }
+
+    for (const [key, bucket] of batches) {
+        if (bucket.length === 0) continue;
+        const sep = key.lastIndexOf('|');
+        ctx.globalAlpha = Number(key.slice(sep + 1)) / ALPHA_STEPS;
+        ctx.fillStyle = key.slice(0, sep);
+        ctx.beginPath();
+        for (const p of bucket) {
+            // moveTo before each arc, or consecutive circles get joined by a line.
+            ctx.moveTo(p.x + p.radius, p.y);
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        }
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+}
+
 export class Shockwave {
     private age = 0;
     private dur: number;
@@ -57,13 +101,19 @@ export class Shockwave {
         const alpha = Math.max(0, 1 - t) * 0.75;
 
         ctx.save();
-        ctx.globalAlpha = alpha;
         ctx.strokeStyle = this.color;
-        ctx.lineWidth = 4 * (1 - t * 0.6);
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 12 * (1 - t);
         ctx.beginPath();
         ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+
+        // Two strokes fake the glow. shadowBlur looks marginally better but it
+        // is one of the most expensive things canvas can do, and a big combo
+        // puts a dozen of these on screen at once.
+        ctx.globalAlpha = alpha * 0.3;
+        ctx.lineWidth = 11 * (1 - t * 0.6);
+        ctx.stroke();
+
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = 4 * (1 - t * 0.6);
         ctx.stroke();
         ctx.restore();
     }
