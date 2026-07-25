@@ -1,7 +1,10 @@
 // Procedural synth — everything generated via Web Audio.
 // Starts on first user gesture to satisfy autoplay policies.
 
-const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24]; // C major pentatonic, ascending
+import * as music from './music.js';
+
+/** One octave of C major pentatonic, used before the music engine has started. */
+const FALLBACK_SCALE = [0, 2, 4, 7, 9];
 const BASE_FREQ = 261.63; // C4
 
 let ctx: AudioContext | null = null;
@@ -15,11 +18,8 @@ const legacyMute = localStorage.getItem('colormatch-mute') === '1';
 let musicMuted = (localStorage.getItem('colormatch-music') ?? (legacyMute ? '1' : '0')) === '1';
 let sfxMuted = (localStorage.getItem('colormatch-sfx') ?? (legacyMute ? '1' : '0')) === '1';
 
-// Ambient pad
-let padOsc1: OscillatorNode | null = null;
-let padOsc2: OscillatorNode | null = null;
-let padGain: GainNode | null = null;
-let padFilter: BiquadFilterNode | null = null;
+// The musical bed lives in music.ts; this module owns the buses and the
+// one-shot game sounds.
 
 function freqOf(semi: number): number {
     return BASE_FREQ * Math.pow(2, semi / 12);
@@ -56,6 +56,18 @@ export function initAudio(): void {
     window.addEventListener('pointerdown', handler, { once: true, passive: true });
     window.addEventListener('keydown', handler, { once: true });
     window.addEventListener('touchstart', handler, { once: true, passive: true });
+
+    // The pad is a continuously running oscillator: rAF stops when the tab is
+    // hidden but Web Audio does not, so without this the drone keeps humming
+    // in the background.
+    document.addEventListener('visibilitychange', () => {
+        if (!ctx || !started) return;
+        if (document.hidden) {
+            if (ctx.state === 'running') ctx.suspend();
+        } else if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+    });
 }
 
 export function isMusicMuted(): boolean {
@@ -65,6 +77,7 @@ export function isMusicMuted(): boolean {
 export function setMusicMuted(m: boolean): void {
     musicMuted = m;
     localStorage.setItem('colormatch-music', m ? '1' : '0');
+    music.setEnabled(!m); // stop scheduling notes, not just silence them
     if (musicBus && ctx) {
         const now = ctx.currentTime;
         const g = musicBus.gain;
@@ -149,67 +162,52 @@ function playNoiseBurst(when: number, dur: number, peak: number, cutoff: number)
     src.stop(t + dur + 0.02);
 }
 
-// Ambient pad — two detuned triangle waves lowpass-filtered
 function startPad(): void {
-    if (!ctx || !musicBus || padOsc1) return;
-
-    padGain = ctx.createGain();
-    padGain.gain.value = 0.05;
-
-    padFilter = ctx.createBiquadFilter();
-    padFilter.type = 'lowpass';
-    padFilter.frequency.value = 800;
-    padFilter.Q.value = 0.6;
-
-    padOsc1 = ctx.createOscillator();
-    padOsc1.type = 'triangle';
-    padOsc1.frequency.value = freqOf(-12); // C3
-
-    padOsc2 = ctx.createOscillator();
-    padOsc2.type = 'triangle';
-    padOsc2.frequency.value = freqOf(-5); // G3
-    padOsc2.detune.value = 7;
-
-    padOsc1.connect(padFilter);
-    padOsc2.connect(padFilter);
-    padFilter.connect(padGain);
-    padGain.connect(musicBus);
-
-    padOsc1.start();
-    padOsc2.start();
+    if (!ctx || !musicBus) return;
+    music.start(ctx, musicBus);
+    music.setEnabled(!musicMuted);
 }
 
-// Call whenever combo/intensity changes
-export function setPadIntensity(intensity: number): void {
-    if (!ctx || !padGain || !padFilter) return;
-    const now = ctx.currentTime;
-    const cut = 600 + intensity * 240;
-    padFilter.frequency.cancelScheduledValues(now);
-    padFilter.frequency.linearRampToValueAtTime(cut, now + 0.3);
-    padGain.gain.cancelScheduledValues(now);
-    padGain.gain.linearRampToValueAtTime(0.04 + intensity * 0.012, now + 0.3);
+/** Combo intensity — drives the pad's brightness, the bass drive and the beat. */
+export function setPadIntensity(level: number): void {
+    music.setIntensity(level);
+}
+
+/** New run: draw a fresh mode so no two games sound the same. */
+export function newMusicSection(): void {
+    music.newSection();
 }
 
 // ── High-level cues ──────────────────────────────────────────────
 
+/**
+ * Pitch of a scale degree in whatever mode the music is currently in. Every
+ * cue is written in degrees rather than fixed semitones, so effects stay in
+ * key when the music changes mode mid-session.
+ */
+function note(d: number): number {
+    if (started) return music.noteAt(d);
+    const n = FALLBACK_SCALE.length;
+    return FALLBACK_SCALE[((d % n) + n) % n] + Math.floor(d / n) * 12;
+}
+
 export function playMatch(combo: number, size: number): void {
     ensureCtx();
     if (!ctx) return;
-    // Ascend the pentatonic scale with combo
-    const stepIdx = Math.min(SCALE.length - 1, (combo - 1) + Math.max(0, size - 3));
-    const semi = SCALE[stepIdx];
-    playTone({ freq: freqOf(semi), dur: 0.22, type: 'triangle', gain: 0.16 });
-    playTone({ freq: freqOf(semi + 7), dur: 0.18, type: 'sine', gain: 0.07, when: 0.01 });
+    // Climb the mode as the combo builds.
+    const d = Math.min(11, (combo - 1) + Math.max(0, size - 3));
+    playTone({ freq: freqOf(note(d)), dur: 0.22, type: 'triangle', gain: 0.16 });
+    playTone({ freq: freqOf(note(d + 2)), dur: 0.18, type: 'sine', gain: 0.07, when: 0.01 });
     playNoiseBurst(0, 0.08, 0.07, 1400);
 }
 
 export function playPowerCreated(isColorBomb: boolean): void {
     ensureCtx();
     if (!ctx) return;
-    const chord = isColorBomb ? [0, 4, 7, 12, 16] : [0, 4, 7, 12];
-    chord.forEach((semi, i) => {
+    const arp = isColorBomb ? [0, 2, 4, 6, 8] : [0, 2, 4, 6];
+    arp.forEach((d, i) => {
         playTone({
-            freq: freqOf(semi + 12),
+            freq: freqOf(note(d) + 12),
             dur: 0.5,
             type: 'triangle',
             gain: 0.13,
@@ -217,16 +215,16 @@ export function playPowerCreated(isColorBomb: boolean): void {
             attack: 0.01,
         });
     });
-    playTone({ freq: freqOf(24), dur: 0.7, type: 'sine', gain: 0.08, when: 0.1 });
+    playTone({ freq: freqOf(note(0) + 24), dur: 0.7, type: 'sine', gain: 0.08, when: 0.1 });
 }
 
 export function playPowerDetonate(isColorBomb: boolean): void {
     ensureCtx();
     if (!ctx) return;
-    const notes = isColorBomb ? [0, 4, 7, 12, 16, 19, 24] : [0, 7, 12, 19];
-    notes.forEach((semi, i) => {
+    const arp = isColorBomb ? [0, 2, 4, 6, 8, 10, 12] : [0, 4, 7, 11];
+    arp.forEach((d, i) => {
         playTone({
-            freq: freqOf(semi + 12),
+            freq: freqOf(note(d) + 12),
             dur: 0.28,
             type: 'triangle',
             gain: 0.12,
@@ -238,18 +236,51 @@ export function playPowerDetonate(isColorBomb: boolean): void {
 
 export function playSwap(): void {
     ensureCtx();
-    playTone({ freq: freqOf(7), dur: 0.06, type: 'sine', gain: 0.05 });
-    playTone({ freq: freqOf(12), dur: 0.06, type: 'sine', gain: 0.05, when: 0.03 });
+    playTone({ freq: freqOf(note(4)), dur: 0.06, type: 'sine', gain: 0.05 });
+    playTone({ freq: freqOf(note(7)), dur: 0.06, type: 'sine', gain: 0.05, when: 0.03 });
 }
 
 export function playUndo(): void {
     ensureCtx();
-    playTone({ freq: freqOf(4), dur: 0.08, type: 'sine', gain: 0.06 });
-    playTone({ freq: freqOf(-3), dur: 0.1, type: 'sine', gain: 0.06, when: 0.04 });
+    playTone({ freq: freqOf(note(2)), dur: 0.08, type: 'sine', gain: 0.06 });
+    playTone({ freq: freqOf(note(-2)), dur: 0.1, type: 'sine', gain: 0.06, when: 0.04 });
 }
 
 export function playDrop(impact: number): void {
     ensureCtx();
     const v = Math.min(1, impact / 14);
     playNoiseBurst(0, 0.08, 0.04 + v * 0.05, 400 + v * 400);
+}
+
+/** Detonation of two combined power-ups — bigger and lower than a normal one. */
+export function playComboBlast(): void {
+    ensureCtx();
+    if (!ctx) return;
+    [0, 2, 4, 6, 8, 10, 12, 14].forEach((d, i) => {
+        playTone({ freq: freqOf(note(d)), dur: 0.45, type: 'triangle', gain: 0.11, when: i * 0.03 });
+    });
+    playNoiseBurst(0, 0.5, 0.13, 500);
+}
+
+/** Descending figure down the current mode — the run is over. */
+export function playGameOver(): void {
+    ensureCtx();
+    if (!ctx) return;
+    [7, 4, 2, 0].forEach((d, i) => {
+        playTone({
+            freq: freqOf(note(d)),
+            dur: 0.65,
+            type: 'triangle',
+            gain: 0.13,
+            when: i * 0.13,
+            attack: 0.02,
+        });
+    });
+    playTone({ freq: freqOf(note(0) - 12), dur: 1.4, type: 'sine', gain: 0.09, when: 0.4 });
+}
+
+/** Short blip for each of the final seconds in timed mode. */
+export function playTimeWarning(final: boolean): void {
+    ensureCtx();
+    playTone({ freq: freqOf(note(final ? 7 : 4)), dur: 0.09, type: 'square', gain: 0.05 });
 }
